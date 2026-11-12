@@ -1,0 +1,171 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../app/providers.dart';
+import '../../app/theme.dart';
+import '../../shared/domain/training.dart';
+import '../../shared/widgets/ui.dart';
+import '../logging/log_page.dart';
+
+class EntryRow extends ConsumerStatefulWidget {
+  const EntryRow({
+    required this.entry,
+    required this.exercise,
+    this.showDate = false,
+    this.compact = false,
+    super.key,
+  });
+  final Entry entry;
+  final Exercise exercise;
+  final bool showDate, compact;
+
+  @override
+  ConsumerState<EntryRow> createState() => _EntryRowState();
+}
+
+class _EntryRowState extends ConsumerState<EntryRow> {
+  bool _busy = false;
+
+  Future<void> _action(String action) async {
+    final entry = widget.entry;
+    if (action == 'edit') {
+      await context.push(
+        '/log',
+        extra: LogRequest(exercise: widget.exercise, entry: entry),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final confirmed = await confirmAction(
+        context,
+        title: 'Delete this entry?',
+        message:
+            'This removes all ${entry.sets.length} sets and the note for ${widget.exercise.name} on ${fullDay(entry.day)}.',
+        label: 'Delete entry',
+        destructive: true,
+      );
+      if (!mounted || !confirmed) return;
+      await ref.read(repositoryProvider).deleteEntry(entry.id);
+      if (mounted) announce(context, 'Entry deleted.');
+    } catch (error) {
+      if (mounted) announce(context, describeError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = ref.watch(durationProvider);
+    final entry = widget.entry, exercise = widget.exercise;
+    final m = exercise.measurement;
+    final summary =
+        '${entry.sets.length} ${entry.sets.length == 1 ? 'set' : 'sets'} · ${measure(entry.total, m, style)} total';
+    if (widget.compact) {
+      final show = entry.sets
+          .take(4)
+          .map((s) => measureValue(s.value, m, style))
+          .join(' · ');
+      final units = m == Measurement.repetitions
+          ? ' reps'
+          : style == DurationStyle.seconds
+          ? ' sec'
+          : '';
+      return RowLink(
+        title: exercise.name,
+        subtitle:
+            '${widget.showDate ? '${shortDay(entry.day)} · ' : ''}$summary',
+        detail: '$show$units${entry.sets.length > 4 ? ' …' : ''}',
+        onTap: () => context.push(
+          '/log',
+          extra: LogRequest(exercise: exercise, entry: entry),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.showDate ? fullDay(entry.day) : exercise.name,
+                    style: context.type.titleMedium,
+                  ),
+                  Text(
+                    widget.showDate ? '${exercise.name} · $summary' : summary,
+                    style: context.type.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Options for ${exercise.name} on ${fullDay(entry.day)}',
+              enabled: !_busy,
+              icon: const Icon(LucideIcons.ellipsis, size: 20),
+              onSelected: _action,
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit entry')),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(
+                    'Delete entry',
+                    style: TextStyle(color: context.colors.danger),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        Wrap(
+          spacing: 18,
+          runSpacing: 9,
+          children: [
+            for (final set in entry.sets)
+              Semantics(
+                label:
+                    'Set ${set.position + 1}: ${measure(set.value, m, style, accessible: true)}',
+                child: ExcludeSemantics(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        measureValue(set.value, m, style),
+                        style: context.type.titleMedium,
+                      ),
+                      Text(
+                        m == Measurement.repetitions
+                            ? 'reps'
+                            : style == DurationStyle.seconds
+                            ? 'sec'
+                            : 'min:sec',
+                        style: context.type.labelSmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          'Latest ${measure(entry.latest, m, style)} · Best ${measure(entry.best, m, style)}',
+          style: context.type.bodySmall,
+        ),
+        if (entry.notes case final note?) ...[
+          const SizedBox(height: 7),
+          Text(note, style: context.type.bodyMedium),
+        ],
+        const SizedBox(height: 12),
+        const Divider(),
+        const SizedBox(height: 5),
+      ],
+    );
+  }
+}
