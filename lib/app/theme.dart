@@ -20,36 +20,36 @@ class TrackerColors extends ThemeExtension<TrackerColors> {
   });
 
   static const light = TrackerColors(
-    background: Color(0xfffafbf8),
+    background: Color(0xfffafafa),
     surface: Color(0xffffffff),
-    ink: Color(0xff19271f),
-    muted: Color(0xff637067),
-    border: Color(0xffdfe5dd),
-    input: Color(0xffeef2ea),
+    ink: Color(0xff191919),
+    muted: Color(0xff606060),
+    border: Color(0xffe0e0e0),
+    input: Color(0xfff0f0f0),
     green: Color(0xff176b45),
     onGreen: Colors.white,
     add: Color(0xffb5ec7c),
-    selection: Color(0xffe7efdf),
+    selection: Color(0xffdedede),
     danger: Color(0xffb42318),
-    grid: Color(0xffd9e1d8),
-    pill: Color(0xff222d26),
+    grid: Color(0xffdddddd),
+    pill: Color(0xff242424),
     onPill: Colors.white,
   );
   static const dark = TrackerColors(
-    background: Color(0xff141d17),
-    surface: Color(0xff202d24),
-    ink: Color(0xffedf4eb),
-    muted: Color(0xffadbbad),
-    border: Color(0xff3a4c3e),
-    input: Color(0xff25332a),
+    background: Color(0xff121212),
+    surface: Color(0xff1d1d1d),
+    ink: Color(0xfff2f2f2),
+    muted: Color(0xffb2b2b2),
+    border: Color(0xff383838),
+    input: Color(0xff262626),
     green: Color(0xff91d8a9),
     onGreen: Color(0xff102e20),
     add: Color(0xffb5ec7c),
-    selection: Color(0xff293e30),
+    selection: Color(0xff414141),
     danger: Color(0xffffaaa0),
-    grid: Color(0xff3b4d40),
-    pill: Color(0xffdaeadd),
-    onPill: Color(0xff19271f),
+    grid: Color(0xff3b3b3b),
+    pill: Color(0xffe6e6e6),
+    onPill: Color(0xff191919),
   );
 
   final Color background,
@@ -96,6 +96,9 @@ class TrackerColors extends ThemeExtension<TrackerColors> {
 abstract final class Space {
   static const double xs = 4, sm = 8, md = 16, lg = 24, xl = 32, xxl = 40;
   static const double target = 48, radius = 12, split = 760;
+  static const double actionRadius = 14, formWidth = 720;
+
+  static double pageInset(double width) => width < 350 ? md : lg;
 }
 
 extension TrackerContext on BuildContext {
@@ -110,19 +113,23 @@ ThemeData trackerTheme(Brightness brightness) {
   final c = brightness == Brightness.dark
       ? TrackerColors.dark
       : TrackerColors.light;
-  final scheme =
-      ColorScheme.fromSeed(seedColor: c.green, brightness: brightness).copyWith(
-        primary: c.green,
-        onPrimary: c.onGreen,
-        surface: c.surface,
-        onSurface: c.ink,
-        onSurfaceVariant: c.muted,
-        outline: c.muted,
-        outlineVariant: c.border,
-        error: c.danger,
-        secondaryContainer: c.selection,
-        onSecondaryContainer: c.ink,
-      );
+  final scheme = ColorScheme.fromSeed(
+    seedColor: c.green,
+    dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
+    brightness: brightness,
+    primary: c.green,
+    onPrimary: c.onGreen,
+    surface: c.surface,
+    surfaceTint: Colors.transparent,
+    surfaceContainerLowest: c.background,
+    surfaceContainer: c.surface,
+    surfaceContainerHigh: c.input,
+    onSurface: c.ink,
+    onSurfaceVariant: c.muted,
+    outline: c.muted,
+    outlineVariant: c.border,
+    error: c.danger,
+  );
   final base = ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
@@ -212,7 +219,9 @@ ThemeData trackerTheme(Brightness brightness) {
         backgroundColor: c.green,
         foregroundColor: c.onGreen,
         minimumSize: const Size(48, 50),
-        shape: shape,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(Space.actionRadius)),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
@@ -248,6 +257,12 @@ ThemeData trackerTheme(Brightness brightness) {
       errorMaxLines: 4,
     ),
     dialogTheme: DialogThemeData(backgroundColor: c.surface, shape: shape),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: c.surface,
+      surfaceTintColor: Colors.transparent,
+      headerForegroundColor: c.ink,
+      dividerColor: c.border,
+    ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,

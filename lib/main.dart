@@ -85,35 +85,39 @@ class _FitnessAppState extends ConsumerState<FitnessApp> {
         value: trackerBars(Theme.of(context).brightness),
         child: opening.hasValue && preferences.hasValue
             ? child!
-            : Scaffold(
+            : opening.hasError || preferences.hasError
+            ? Scaffold(
                 body: SafeArea(
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 380),
                       child: Padding(
                         padding: const EdgeInsets.all(24),
-                        child: opening.hasError || preferences.hasError
-                            ? EmptyBlock(
-                                title: 'V couldn’t open your records',
-                                message:
-                                    'Try opening the local database again.',
-                                action: 'Try again',
-                                onAction: () {
-                                  ref.invalidate(repositoryProvider);
-                                  ref.invalidate(bootstrapProvider);
-                                  ref.invalidate(preferencesProvider);
-                                },
-                              )
-                            : Semantics(
-                                label: 'Opening your records',
-                                child: const SizedBox.square(
-                                  dimension: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
+                        child: EmptyBlock(
+                          title: 'Couldn’t open your records',
+                          message: 'Try opening the local database again.',
+                          action: 'Try again',
+                          onAction: () {
+                            ref.invalidate(repositoryProvider);
+                            ref.invalidate(bootstrapProvider);
+                            ref.invalidate(preferencesProvider);
+                          },
+                        ),
                       ),
+                    ),
+                  ),
+                ),
+              )
+            : Scaffold(
+                body: Center(
+                  child: Semantics(
+                    label: 'Opening your records',
+                    child: Image.asset(
+                      Branding.mark,
+                      width: 78,
+                      height: 78,
+                      color: context.colors.ink,
+                      excludeFromSemantics: true,
                     ),
                   ),
                 ),

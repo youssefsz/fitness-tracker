@@ -6,16 +6,18 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 
 Future<void> openGoal(
   BuildContext context,
   Exercise exercise,
   Goal? goal,
-  int? best,
+  Performance data,
 ) => Navigator.of(context).push<void>(
-  MaterialPageRoute(
-    builder: (_) => GoalPage(exercise: exercise, original: goal, best: best),
+  platformPageRoute<void>(
+    context,
+    (_) => GoalPage(exercise: exercise, original: goal, data: data),
   ),
 );
 
@@ -37,7 +39,7 @@ class GoalSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = goal;
-    Future<void> edit() => openGoal(context, exercise, current, data.best);
+    Future<void> edit() => openGoal(context, exercise, current, data);
     if (current == null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,12 +117,12 @@ class GoalPage extends ConsumerStatefulWidget {
   const GoalPage({
     required this.exercise,
     required this.original,
-    required this.best,
+    required this.data,
     super.key,
   });
   final Exercise exercise;
   final Goal? original;
-  final int? best;
+  final Performance data;
 
   @override
   ConsumerState<GoalPage> createState() => _GoalPageState();
@@ -206,7 +208,14 @@ class _GoalPageState extends ConsumerState<GoalPage> {
     final measurement = widget.exercise.measurement;
     final style = ref.watch(durationProvider);
     final today = ref.watch(todayProvider);
-    final best = widget.best;
+    final best = widget.data.best;
+    final target = int.tryParse(_value.text);
+    final bestByDeadline = _deadline == null
+        ? best
+        : widget.data.days
+              .where((day) => !day.day.isAfter(_deadline!))
+              .fold(0, (best, day) => day.best > best ? day.best : best);
+    String format(int value) => measure(value, measurement, style);
     return ProtectDraft<void>(
       dirty:
           _value.text != (widget.original?.target.toString() ?? '') ||
@@ -231,6 +240,7 @@ class _GoalPageState extends ConsumerState<GoalPage> {
         children: [
           ScreenHeading(
             widget.exercise.name,
+            leading: ExerciseIcon(widget.exercise.name, size: 40),
             subtitle: 'One best-set goal',
             top: 0,
           ),
@@ -243,9 +253,11 @@ class _GoalPageState extends ConsumerState<GoalPage> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             style: context.type.headlineMedium,
-            decoration: InputDecoration(
-              labelText: 'Target in ${measurement.unit}',
-              errorText: _error,
+            decoration: lineInput(
+              context,
+              label: 'Target in ${measurement.unit}',
+              error: _error,
+              suffix: measurement.unit,
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
@@ -256,6 +268,40 @@ class _GoalPageState extends ConsumerState<GoalPage> {
                 : 'Your personal best is ${measure(best, measurement, style)}.',
             style: context.type.bodySmall,
           ),
+          if (target != null &&
+              setValueError(target) == null &&
+              bestByDeadline != null) ...[
+            const SizedBox(height: Space.lg),
+            LinearProgressIndicator(
+              value: (bestByDeadline / target).clamp(0.0, 1.0),
+              minHeight: 7,
+              borderRadius: BorderRadius.circular(20),
+              backgroundColor: context.colors.border,
+              semanticsLabel: 'Goal progress',
+            ),
+            const SizedBox(height: Space.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${measureValue(bestByDeadline, measurement, style)} of ${format(target)}',
+                    style: context.type.bodySmall,
+                  ),
+                ),
+                const SizedBox(width: Space.sm),
+                Flexible(
+                  child: Text(
+                    bestByDeadline >= target
+                        ? 'Achieved'
+                        : '${format(target - bestByDeadline)} to go',
+                    style: context.type.bodySmall,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           const Divider(),
           SwitchListTile.adaptive(

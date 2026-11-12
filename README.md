@@ -1,6 +1,6 @@
-# V
+# Fitness Tracker
 
-V is an offline exercise log for iPhone, iPad, and Android. Record reps or timed sets, compare results, and keep a portable backup. The app starts with an empty log.
+Fitness Tracker is an offline exercise log for iPhone, iPad, and Android. Record reps or timed sets, compare results, and keep a portable backup. The app starts with an empty log.
 
 ## Run the app
 
@@ -17,7 +17,7 @@ The device ID above is the designated iPhone 17 simulator on the development hos
 
 - Read [Architecture](ARCHITECTURE.md) for SQLite, state, and analytics rules.
 - Read [Data formats](DATA_FORMAT.md) before changing backup or activity import.
-- See [Design](DESIGN.md) for the visual system and [the original references](docs/reference/) for screenshots and raster brand masters.
+- See [Design](DESIGN.md) for the current visual system.
 - To change the Drift schema, edit `lib/core/database/database.dart`. Regenerate `database.g.dart` with `dart run build_runner build`. Bump the schema version, add the migration and its tests, then run `dart run drift_dev schema dump lib/core/database/database.dart docs/schema`.
 
 ## Regenerate the brand assets
@@ -28,7 +28,7 @@ Edit the display name in `tool/brand.json` and the version in `pubspec.yaml`. On
 python3 tool/generate_brand_assets.py
 ```
 
-The supplied raster masters live in `docs/reference/brand`. The generator produces the Flutter logo in `assets/brand`, the iOS icon and launch catalogs, and the Android launcher and splash assets. The favicon is reference material because this project targets native mobile. The screen reference PNGs are documentation and are excluded from the application bundle.
+The app icon and launch mark masters live in `tool/brand_sources`. The generator produces the Flutter logo in `assets/brand`, the iOS icon and launch catalogs, and the Android launcher and splash assets.
 
 ## Load the simulator demo
 

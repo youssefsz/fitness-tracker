@@ -1,6 +1,6 @@
 # Fitness tracker design system
 
-This system defines the visual direction and interaction rules for a personal exercise progress tracker. The accompanying images show the intended layouts. Use the tokens and rules below to make the implementation consistent where generated images differ slightly in spacing, color, or control shape.
+This guide describes the app's visual language and interaction rules. Use the palette, typography, and component behavior to keep new screens coherent. Layouts can evolve with the product.
 
 The product records results whenever someone exercises. It supports repetitions, duration, historical entries, multiple sets, and optional personal goals. It does not prescribe routines, schedules, or streaks.
 
@@ -13,33 +13,27 @@ The product records results whenever someone exercises. It supports repetitions,
 - Preserve actual dates and declines. Missing activity is missing data, never a zero result.
 - Keep controls recognizable and labels explicit. Visual restraint must not hide functionality.
 
-Avoid gradients, glows, decorative glass, stacked rounded cards, nested cards, decorative icon backgrounds, unnecessary illustrations, motivational pressure, and invented dashboard metrics.
+Use flat surfaces, quiet separators, and exercise icons with text labels. Keep the focus on recorded activity.
 
 ## Color tokens
 
-These are the intended implementation values. Generated PNG pixels can vary slightly.
+The [Flutter theme](lib/app/theme.dart) defines the full palette for both appearances.
 
-| Token | Value | Use |
+| Role | Light | Dark |
 | --- | --- | --- |
-| `background` | `#FAFBF8` | Main app background |
-| `surface` | `#FFFFFF` | Floating navigation and focused controls |
-| `text.primary` | `#19271F` | Headings, results, primary labels |
-| `text.secondary` | `#637067` | Supporting labels and dates |
-| `border.subtle` | `#DFE5DD` | Row separators and form boundaries |
-| `surface.input` | `#EEF2EA` | Editable fields and search |
-| `action.primary` | `#176B45` | Main actions and chart strokes |
-| `action.add` | `#B5EC7C` | Separate floating Add button and app icon |
-| `selection.soft` | `#E7EFDF` | Subtle selected rows |
-| `danger` | `#B42318` | Delete and remove actions |
-| `chart.grid` | `#D9E1D8` | Sparse chart reference lines |
+| App background | `#FAFAFA` | `#121212` |
+| Surface | `#FFFFFF` | `#1D1D1D` |
+| Input surface | `#F0F0F0` | `#262626` |
+| Primary text | `#191919` | `#F2F2F2` |
+| Supporting text | `#606060` | `#B2B2B2` |
+| Primary action and charts | `#176B45` | `#91D8A9` |
+| Add button and brand accent | `#B5EC7C` | `#B5EC7C` |
 
-Use dark text on the light green Add button. Use white text on dark green or charcoal buttons. Do not use light green as small text on a white background. Verify contrast in the implemented interface rather than judging the raster mockups alone.
-
-Only light appearance is illustrated in this package. Settings includes a system appearance preference; a dark palette still needs to be designed and checked before that option is implemented.
+Use neutral surfaces in both appearances. Use the paired foreground from the theme on filled buttons and check text contrast in both modes.
 
 ## Typography
 
-Use the platform system sans-serif for the native app: San Francisco on iOS and the system font on Android. The images establish the hierarchy, not a licensed or identified font file. Keep numbers aligned with tabular figures where available.
+Use the platform system sans-serif on iOS and Android. Keep numbers aligned with tabular figures where available.
 
 | Role | Starting size | Weight | Use |
 | --- | --- | --- | --- |
@@ -72,16 +66,16 @@ Most content has no container background. Small inputs can have 8–12 unit corn
 
 ## Navigation
 
-The app has exactly three main tabs: **Overview**, **Progress**, and **History**.
+The main tabs are **Overview**, **Progress**, and **History**. The content switches instantly while the selected tab indicator slides. Respect Reduce Motion.
 
 The bottom navigation consists of two physically separate elements:
 
-1. A white horizontal capsule containing the three text tabs. The selected tab sits in a smaller charcoal pill with white text. Inactive labels are dark.
+1. A horizontal capsule using the theme's surface color. The selected tab has a high-contrast indicator.
 2. A separate circular light green button containing a centered dark plus sign. It opens activity logging.
 
 Start with a 56-unit height, a 12-unit gap, and approximately 20-unit outer margins. Place both elements above the bottom safe area. Add content padding so the final row can scroll clear of them. Preserve the two-element composition on narrow screens and with larger text; do not replace it with a conventional full-width tab bar.
 
-Secondary pages use a back action. Focused forms use Cancel and one clear save action. Support platform back gestures and keyboard dismissal. Protect an unsaved draft when a dismissal would lose entered data.
+Secondary pages use platform navigation. Add entry uses a sheet with a Back action between steps, including exercise creation. The sheet closes on a downward drag or outside tap and asks before discarding a draft. Focused forms have one clear save action.
 
 ## Component rules
 
@@ -130,7 +124,7 @@ The latest set leads the summary, as requested. For multiple sets recorded on on
 
 For a single set, show its result and date, with “Not enough history to compare.” Do not invent a percentage. Handle any imported zero baseline without division by zero. Show negative improvement honestly. Do not sum repetitions and seconds into one cross-exercise number.
 
-Use **Latest set** and **Best set** as two views of the same performance chart. Normalize their control style across screens to plain text tabs with a dark underline on the selected view. The generated images vary slightly here; this rule takes precedence.
+Use **Latest set** and **Best set** as two views of the same performance chart. Show the selected view with an underline.
 
 - Space points according to actual calendar dates, not equally spaced record indices.
 - Plot the last set per recorded date in Latest set mode and the day's maximum in Best set mode. Keep all individual attempts accessible in History.
@@ -140,8 +134,6 @@ Use **Latest set** and **Best set** as two views of the same performance chart. 
 - Keep y-axis labels readable and use a zero baseline for volume bars. Avoid smoothed curves that exaggerate peaks or declines.
 - Apply 7-day, 30-day, 90-day, last-year, all-time, and inclusive custom filters to all range statistics.
 - If an all-time personal record is shown beside filtered statistics, label it explicitly as all-time.
-
-The sample push-up data totals **129 reps across 8 sets on 6 dates**. The latest set is **18**, the personal best **22**, and the first set **10**. On 12 November, the sets **22, 20, 18** total **60 reps**. Raster chart positions are illustrative; implementation must calculate exact coordinates from the recorded dates.
 
 ## Feedback, motion, and accessibility
 
@@ -153,45 +145,6 @@ Support screen readers, logical focus order, increased text sizes, and clear foc
 
 ## Brand assets
 
-The identity uses a substantial V with a slightly higher right arm. The app's full name is not finalized; this package does not invent a wordmark.
+The launcher icon uses a charcoal runner with the FT initials on a lime background. The splash screen uses the same mark on the neutral background for each appearance.
 
-| File | Format | Use |
-| --- | --- | --- |
-| [Primary V logo](docs/reference/brand/v-logo-dark.png) | 1254 × 1254 RGBA PNG | Transparent charcoal mark on light surfaces |
-| [App icon](docs/reference/brand/v-app-icon.png) | 1254 × 1254 RGB PNG | Opaque green square with charcoal V |
-| [Favicon](docs/reference/brand/v-favicon.png) | 1254 × 1254 RGB PNG | Opaque charcoal square with green V |
-
-Preserve aspect ratio and keep the supplied clear space. Do not stretch, rotate, add shadows, or add gradient fills. Let the platform apply its own app-icon mask; the supplied icon has square outer corners. These are raster source assets, not SVG masters or complete native icon catalogs. Platform build tooling should create its required output sizes.
-
-The light/inverse-logo experiments are excluded because their transparent edges were not suitable for delivery.
-
-## Screen inventory
-
-Each screen is its own PNG. Measurements and dates shown in the mockups are illustrative.
-
-| Screen | Image | Purpose |
-| --- | --- | --- |
-| Overview | [01-overview.png](docs/reference/screens/01-overview.png) | Latest results and recent activity |
-| Progress | [02-progress.png](docs/reference/screens/02-progress.png) | Performance, comparison, and volume |
-| History | [03-history.png](docs/reference/screens/03-history.png) | Calendar and dated sets |
-| Exercise details | [04-exercise-details.png](docs/reference/screens/04-exercise-details.png) | Individual history and optional goal |
-| Choose exercise | [05-choose-exercise.png](docs/reference/screens/05-choose-exercise.png) | Search, recents, and creation entry point |
-| Log repetitions | [06-log-repetitions.png](docs/reference/screens/06-log-repetitions.png) | Multiple sets and exercises |
-| Log duration | [07-log-duration.png](docs/reference/screens/07-log-duration.png) | Minute/second entry with keyboard |
-| Manage exercises | [08-manage-exercises.png](docs/reference/screens/08-manage-exercises.png) | Edit, archive, and restore |
-| Create exercise | [09-create-exercise.png](docs/reference/screens/09-create-exercise.png) | Name and measurement type |
-| Set a goal | [10-set-goal.png](docs/reference/screens/10-set-goal.png) | Optional best-set target |
-| Settings | [11-settings.png](docs/reference/screens/11-settings.png) | Appearance, units, export, and import |
-| Date range | [12-date-range.png](docs/reference/screens/12-date-range.png) | Presets and custom dates |
-| Edit entry | [13-edit-entry.png](docs/reference/screens/13-edit-entry.png) | Correct sets, date, notes, or delete |
-| Empty Overview | [14-overview-empty.png](docs/reference/screens/14-overview-empty.png) | First result or backup import |
-
-## Local gallery
-
-The gallery is available at [http://127.0.0.1:4173/fitness-gallery/](http://127.0.0.1:4173/fitness-gallery/) while the local server is running. Its sidebar groups main pages, logging, exercises, goals/preferences, states, and brand assets. Search, individual downloads, full-size viewing, and previous/next navigation are available.
-
-The gallery is a separate browsing tool. Its desktop sidebar is not part of the mobile app's navigation system.
-
-## Reference patterns
-
-The design study used [Hevy's set-entry layout](https://mobbin.com/screens/7178a6f5-fe6b-4b20-9e1b-909af6cd8382), [Gymshark's chart selection](https://mobbin.com/screens/9e5ab8b6-48c8-4025-b2f0-4d251f925256), and [Fitbit's activity calendar](https://mobbin.com/screens/fde27a89-f4ce-4811-82d1-be58d7db98b4). These are iOS references for specific interaction patterns. The app retains its own layout, colors, scope, and required floating navigation.
+[Brand configuration](tool/brand.json) supplies the display name and launch colors. The [icon master](tool/brand_sources/app-icon.png) and [transparent mark master](tool/brand_sources/mark.png) supply the artwork. Run the [asset generator](tool/generate_brand_assets.py) to regenerate the platform assets after changing the artwork or launch colors.

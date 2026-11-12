@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
@@ -507,34 +506,5 @@ class MetricTabs extends StatelessWidget {
           ),
         ),
     ],
-  );
-}
-
-class FilterButton extends StatelessWidget {
-  const FilterButton(
-    this.label,
-    this.onPressed, {
-    this.icon = LucideIcons.chevronDown,
-    super.key,
-  });
-  final String label;
-  final VoidCallback? onPressed;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => OutlinedButton(
-    style: OutlinedButton.styleFrom(
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    ),
-    onPressed: onPressed,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(child: Text(label, style: context.type.titleSmall)),
-        const SizedBox(width: 7),
-        Icon(icon, size: 16),
-      ],
-    ),
   );
 }

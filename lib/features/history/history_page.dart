@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../logging/log_page.dart';
-import '../progress/performance_chart.dart';
 import 'entry_row.dart';
 
 class HistoryPage extends ConsumerStatefulWidget {
@@ -94,6 +93,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       children: [
         ScreenHeading(
           'History',
+          bottom: Space.xs,
           action: RoundControl(
             _searching ? LucideIcons.x : LucideIcons.search,
             _searching ? 'Close history search' : 'Search history',
@@ -127,11 +127,12 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
             final byId = {
               for (final item in catalog) item.exercise.id: item.exercise,
             };
+            final selectedExercise = byId[_exercise];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 FilterButton(
-                  byId[_exercise]?.name ?? 'All exercises',
+                  selectedExercise?.name ?? 'All exercises',
                   () async {
                     final filter = await chooseOption<String>(
                       context,
@@ -148,6 +149,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                           ),
                       ],
                       selected: _exercise ?? '',
+                      leading: (id, name) =>
+                          id.isEmpty ? null : ExerciseIcon(name),
                     );
                     if (mounted && filter != null) {
                       setState(() {
@@ -156,9 +159,13 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                       });
                     }
                   },
+                  leading: selectedExercise == null
+                      ? null
+                      : ExerciseIcon(selectedExercise.name),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: Space.xs),
                 ResponsiveSplit(
+                  stackGap: Space.sm,
                   main: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -189,7 +196,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                           'Reload activity dates',
                           () => ref.invalidate(days),
                         ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: Space.sm),
                       const Divider(),
                     ],
                   ),
@@ -201,9 +208,9 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                         _allActivity ? 'All activity' : weekday(_selected),
                         action: QuietButton(
                           'Add',
-                          () => context.push(
-                            '/log',
-                            extra: LogRequest(
+                          () => showLogSheet(
+                            context,
+                            request: LogRequest(
                               day: _allActivity ? today : _selected,
                               exercise: byId[_exercise]?.archived == false
                                   ? byId[_exercise]

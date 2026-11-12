@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../logging/log_page.dart';
 
@@ -76,9 +77,12 @@ class _EntryRowState extends ConsumerState<EntryRow> {
           : '';
       return RowLink(
         title: exercise.name,
+        leading: ExerciseIcon(exercise.name),
         subtitle:
             '${widget.showDate ? '${shortDay(entry.day)} · ' : ''}$summary',
         detail: '$show$units${entry.sets.length > 4 ? ' …' : ''}',
+        detailStyle: context.type.labelLarge,
+        showChevron: false,
         onTap: () => context.push(
           '/log',
           extra: LogRequest(exercise: exercise, entry: entry),
@@ -90,6 +94,8 @@ class _EntryRowState extends ConsumerState<EntryRow> {
       children: [
         Row(
           children: [
+            ExerciseIcon(exercise.name),
+            const SizedBox(width: Space.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

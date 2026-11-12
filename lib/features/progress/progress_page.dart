@@ -7,7 +7,9 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
+import '../logging/log_page.dart';
 import 'date_range_page.dart';
 import 'performance_chart.dart';
 
@@ -23,15 +25,21 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
   RangeSelection _range = allTime;
 
   Future<void> _pickExercise(List<CatalogItem> list, String current) async {
-    final id = await chooseOption<String>(context, 'Choose exercise', [
-      for (final row in list)
-        (
-          value: row.exercise.id,
-          label: row.exercise.name,
-          subtitle:
-              '${row.exercise.measurement.label}${row.exercise.archived ? ' · Archived' : ''}',
-        ),
-    ], selected: current);
+    final id = await chooseOption<String>(
+      context,
+      'Choose exercise',
+      [
+        for (final row in list)
+          (
+            value: row.exercise.id,
+            label: row.exercise.name,
+            subtitle:
+                '${row.exercise.measurement.label}${row.exercise.archived ? ' · Archived' : ''}',
+          ),
+      ],
+      selected: current,
+      leading: (_, name) => ExerciseIcon(name),
+    );
     if (!mounted || id == null || id == current) return;
     ref.read(actionsProvider).select();
     setState(() => _exercise = id);
@@ -45,7 +53,7 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
       width: 1100,
       scrollKey: const PageStorageKey('progress'),
       children: [
-        const ScreenHeading('Progress'),
+        const ScreenHeading('Progress', bottom: Space.xs),
         AsyncPanel(
           ref.watch(catalogProvider),
           retry: () => ref.invalidate(catalogProvider),
@@ -55,7 +63,7 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
                 title: 'See how your sets change',
                 message: 'Record a result to see its first, latest, and best values here.',
                 action: 'Add entry',
-                onAction: () => context.push('/log'),
+                onAction: () => showLogSheet(context),
               );
             }
             final tracked = list.where((row) => row.count > 0).toList();
@@ -68,24 +76,19 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilterButton(
-                      exercise.name,
-                      () => _pickExercise(tracked, exercise.id),
-                    ),
-                    FilterButton(_range.preset.label, () async {
-                      final range = await selectRange(context, _range, today);
-                      if (mounted && range != null) {
-                        ref.read(actionsProvider).select();
-                        setState(() => _range = range);
-                      }
-                    }),
-                  ],
+                FilterButton(
+                  exercise.name,
+                  () => _pickExercise(tracked, exercise.id),
+                  leading: ExerciseIcon(exercise.name),
+                  prominent: true,
                 ),
-                const SizedBox(height: 12),
+                FilterButton(_range.preset.label, () async {
+                  final range = await selectRange(context, _range, today);
+                  if (mounted && range != null) {
+                    ref.read(actionsProvider).select();
+                    setState(() => _range = range);
+                  }
+                }),
                 PerformanceView(
                   key: ValueKey(exercise.id),
                   exercise: exercise,
@@ -106,12 +109,13 @@ class PerformanceView extends ConsumerWidget {
     required this.exercise,
     required this.range,
     this.link = false,
-    this.volume = true,
+    this.rangeAction,
     super.key,
   });
   final Exercise exercise;
   final DayRange range;
-  final bool link, volume;
+  final bool link;
+  final Widget? rangeAction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -122,9 +126,47 @@ class PerformanceView extends ConsumerWidget {
       retry: () => ref.invalidate(provider),
       builder: (data) {
         if (data.days.isEmpty) {
-          return const EmptyBlock(
-            title: 'No sets in this range',
-            message: 'Choose a wider date range or record another set.',
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (rangeAction != null)
+                SectionTitle('Performance', action: rangeAction),
+              const EmptyBlock(
+                title: 'No sets in this range',
+                message: 'Choose a wider date range or record another set.',
+              ),
+            ],
+          );
+        }
+        final summary = PerformanceSummary(
+          data: data,
+          measurement: exercise.measurement,
+          style: style,
+        );
+        final stats = _StatLine(
+          data: data,
+          measurement: exercise.measurement,
+          style: style,
+        );
+        final plot = _PerformancePlot(
+          data: data,
+          measurement: exercise.measurement,
+          style: style,
+          rangeAction: rangeAction,
+        );
+        if (rangeAction != null) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              summary,
+              const Divider(),
+              const SizedBox(height: Space.md),
+              stats,
+              const SizedBox(height: Space.md),
+              const Divider(),
+              const SizedBox(height: Space.sm),
+              plot,
+            ],
           );
         }
         final first = range.start ?? data.firstDay!;
@@ -140,66 +182,43 @@ class PerformanceView extends ConsumerWidget {
             ),
             const SizedBox(height: 14),
             ResponsiveSplit(
+              stackGap: Space.md,
               main: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PerformanceSummary(
-                    data: data,
-                    measurement: exercise.measurement,
-                    style: style,
-                  ),
+                  summary,
                   const Divider(),
                   const SizedBox(height: 15),
-                  _PerformancePlot(
-                    data: data,
-                    measurement: exercise.measurement,
-                    style: style,
-                  ),
+                  plot,
                 ],
               ),
               side: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _StatLine(
-                    data: data,
-                    measurement: exercise.measurement,
-                    style: style,
+                  stats,
+                  const SizedBox(height: 18),
+                  const Divider(),
+                  const SizedBox(height: 14),
+                  SectionTitle(
+                    'Total volume',
+                    action: Text(
+                      measure(data.total, exercise.measurement, style),
+                      style: context.type.titleMedium,
+                      textAlign: TextAlign.end,
+                    ),
                   ),
-                  if (volume) ...[
-                    const SizedBox(height: 18),
-                    const Divider(),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 18,
-                      runSpacing: 5,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        const Text(
-                          'Total volume',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 19,
-                          ),
-                        ),
-                        Text(
-                          measure(data.total, exercise.measurement, style),
-                          style: context.type.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${data.setCount} ${data.setCount == 1 ? 'set' : 'sets'} across ${data.days.length} '
-                      '${data.days.length == 1 ? 'recorded date' : 'recorded dates'}',
-                      style: context.type.bodySmall,
-                    ),
-                    PerformanceChart(
-                      days: data.days,
-                      metric: ChartMetric.volume,
-                      measurement: exercise.measurement,
-                      durationStyle: style,
-                    ),
-                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    '${data.setCount} ${data.setCount == 1 ? 'set' : 'sets'} across ${data.days.length} '
+                    '${data.days.length == 1 ? 'recorded date' : 'recorded dates'}',
+                    style: context.type.bodySmall,
+                  ),
+                  PerformanceChart(
+                    days: data.days,
+                    metric: ChartMetric.volume,
+                    measurement: exercise.measurement,
+                    durationStyle: style,
+                  ),
                   if (link)
                     QuietButton(
                       'View exercise details',
@@ -311,10 +330,12 @@ class _PerformancePlot extends ConsumerStatefulWidget {
     required this.data,
     required this.measurement,
     required this.style,
+    this.rangeAction,
   });
   final Performance data;
   final Measurement measurement;
   final DurationStyle style;
+  final Widget? rangeAction;
 
   @override
   ConsumerState<_PerformancePlot> createState() => _PerformancePlotState();
@@ -327,7 +348,7 @@ class _PerformancePlotState extends ConsumerState<_PerformancePlot> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const SectionTitle('Performance'),
+      SectionTitle('Performance', action: widget.rangeAction),
       MetricTabs(
         selected: _metric,
         onChanged: (metric) {

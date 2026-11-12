@@ -17,7 +17,7 @@ Device-based testing is restricted to the iPhone 17 simulator running iOS 27.0, 
 ```sh
 xcrun simctl list devices available
 xcrun simctl list runtimes
-flutter build ios --simulator --debug --no-codesign
+flutter build ios --simulator --debug
 flutter test integration_test/fitness_flow_test.dart -d 15D09C3D-812A-408D-B323-8C56BE563D82
 flutter build apk --debug
 ```
@@ -33,13 +33,13 @@ The simulator demo loader is separate from the test suite. Run device tests befo
 After `flutter pub get`, prepare the iOS build settings and run the native scheme:
 
 ```sh
-flutter build ios --simulator --debug --no-codesign --config-only
+flutter build ios --simulator --debug --config-only
 xcodebuild test -workspace ios/Runner.xcworkspace -scheme NativeSmoke \
   -configuration Debug \
   -destination 'platform=iOS Simulator,id=15D09C3D-812A-408D-B323-8C56BE563D82' \
   -parallel-testing-enabled NO \
   -derivedDataPath "$PWD/build/native-smoke" \
-  CODE_SIGNING_ALLOWED=NO FLUTTER_TARGET="$PWD/lib/main.dart"
+  FLUTTER_TARGET="$PWD/lib/main.dart"
 ```
 
 XCTest uses the actual iOS share sheet and document picker. It checks cancellation in both and checks that the import screen remains open after backgrounding and resuming.
@@ -47,12 +47,12 @@ XCTest uses the actual iOS share sheet and document picker. It checks cancellati
 ## Results
 
 - Formatting and static analysis passed.
-- All 24 host tests passed with coverage enabled.
+- All 26 host tests passed with coverage enabled.
 - Both Flutter integration tests passed on the designated iPhone 17. They exercised backdated logging for both measurement types, multiple sets, edits and deletes, ranges and chart values, goals, archive and restore, database reopening, malformed AI input, and duplicate AI imports.
-- The native XCTest passed on the same simulator. It opened and dismissed the system share sheet and document picker, then verified background and resume.
+- The native transfer XCTest passed on the same simulator. It opened and dismissed the system share sheet and document picker, then verified background and resume. The navigation XCTest verified the add-entry sheet, returning to the exercise picker, and the iOS edge swipe from Settings.
 - The iOS simulator build and Android debug APK build passed. The built IDs were `tn.dhibi.fitness-tracker` and `tn.dhibi.fitness_tracker`, respectively.
-- The shipped Flutter logo is 5.8 KiB. The screenshot references and raster masters are excluded from the app assets.
+- The app bundles the resized Flutter logo. The raster masters are used by the brand generator and excluded from the app assets.
 
 No Android or iPad device was launched. Host widgets cover narrow phones and a tablet-sized layout. Saving to an external share destination, selecting an external file from the native picker, physical haptics, and release performance were outside these checks.
 
-The final simulator install was relaunched with the demo database. Overview rendered in light and dark appearance. The database retained 6 exercises, 536 entries, 1,649 sets, and 5 goals from 13 March through 12 November 2026. The light Overview was left open. A cold launch recording showed the V launch screen and launcher icon. On the debug reinstall, the simulator showed a black interval before the native launch screen appeared.
+The final simulator install was relaunched with the demo database. Overview rendered in light and dark appearance. The database retained 6 exercises, 536 entries, 1,649 sets, and 5 goals from 13 March through 12 November 2026. The light Overview was left open. A cold launch recording showed the V launch screen and launcher icon. On iOS 27, SpringBoard needs the simulator app’s local signature to render the launch screen on first install. Use the signed simulator build command above and verify the bundle with `codesign --verify --deep --strict build/ios/iphonesimulator/Runner.app`.

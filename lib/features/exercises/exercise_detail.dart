@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../goals/goal_page.dart';
 import '../history/entry_row.dart';
 import '../logging/log_page.dart';
 import '../progress/date_range_page.dart';
-import '../progress/performance_chart.dart';
 import '../progress/progress_page.dart';
 import 'exercise_library.dart';
 
@@ -153,21 +152,24 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                 children: [
                   ScreenHeading(
                     exercise.name,
+                    leading: ExerciseIcon(exercise.name, size: 40),
                     top: 0,
                     subtitle:
                         '${exercise.measurement.label}${exercise.archived ? ' · Archived' : ''}',
                   ),
-                  FilterButton(_range.preset.label, () async {
-                    final selected = await selectRange(context, _range, today);
-                    if (mounted && selected != null) {
-                      setState(() => _range = selected);
-                    }
-                  }),
-                  const SizedBox(height: 12),
                   PerformanceView(
                     exercise: exercise,
                     range: selectionBounds(_range, today),
-                    volume: false,
+                    rangeAction: FilterButton(_range.preset.label, () async {
+                      final selected = await selectRange(
+                        context,
+                        _range,
+                        today,
+                      );
+                      if (mounted && selected != null) {
+                        setState(() => _range = selected);
+                      }
+                    }),
                   ),
                   const SizedBox(height: 16),
                   const Divider(),
@@ -236,13 +238,14 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
           ? null
           : KeyboardFooter(
               child: ActionFooter(
+                width: 1100,
                 label: exercise.archived ? 'Restore exercise' : 'Add entry',
                 busy: _busy,
                 onPressed: exercise.archived
                     ? () => _archive(exercise)
-                    : () => context.push(
-                        '/log',
-                        extra: LogRequest(exercise: exercise),
+                    : () => showLogSheet(
+                        context,
+                        request: LogRequest(exercise: exercise),
                       ),
               ),
             ),

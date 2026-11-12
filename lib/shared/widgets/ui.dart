@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -109,7 +110,7 @@ class ScreenScroll extends StatelessWidget {
   const ScreenScroll({
     required this.children,
     this.primary = false,
-    this.width = 720,
+    this.width = Space.formWidth,
     this.controller,
     this.scrollKey,
     super.key,
@@ -127,7 +128,7 @@ class ScreenScroll extends StatelessWidget {
     bottom: false,
     child: LayoutBuilder(
       builder: (context, limits) {
-        final side = limits.maxWidth < 350 ? 16.0 : 24.0;
+        final side = Space.pageInset(limits.maxWidth);
         return CustomScrollView(
           key: scrollKey,
           controller: controller,
@@ -163,11 +164,12 @@ class ResponsiveSplit extends StatelessWidget {
   const ResponsiveSplit({
     required this.main,
     required this.side,
-    this.gap = 40,
+    this.gap = Space.xxl,
+    this.stackGap = Space.lg,
     super.key,
   });
   final Widget main, side;
-  final double gap;
+  final double gap, stackGap;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -184,7 +186,7 @@ class ResponsiveSplit extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               main,
-              const SizedBox(height: Space.xl),
+              SizedBox(height: stackGap),
               side,
             ],
           ),
@@ -196,20 +198,23 @@ class ScreenHeading extends StatelessWidget {
     this.title, {
     this.subtitle,
     this.action,
-    this.top = 16,
+    this.leading,
+    this.top = Space.md,
+    this.bottom = Space.md,
     super.key,
   });
   final String title;
   final String? subtitle;
-  final Widget? action;
-  final double top;
+  final Widget? action, leading;
+  final double top, bottom;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(top: top, bottom: Space.md),
+    padding: EdgeInsets.only(top: top, bottom: bottom),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (leading != null) ...[leading!, const SizedBox(width: Space.sm)],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,6 +298,48 @@ class QuietButton extends StatelessWidget {
   );
 }
 
+class FilterButton extends StatelessWidget {
+  const FilterButton(
+    this.label,
+    this.onPressed, {
+    this.prominent = false,
+    this.leading,
+    super.key,
+  });
+  final String label;
+  final VoidCallback onPressed;
+  final bool prominent;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    style: TextButton.styleFrom(
+      alignment: AlignmentDirectional.centerStart,
+      padding: EdgeInsets.zero,
+      foregroundColor: context.colors.ink,
+    ),
+    onPressed: onPressed,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (leading != null) ...[leading!, const SizedBox(width: Space.sm)],
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: prominent
+                ? context.type.titleLarge
+                : context.type.labelLarge,
+          ),
+        ),
+        const SizedBox(width: Space.sm),
+        const Icon(LucideIcons.chevronDown, size: 16),
+      ],
+    ),
+  );
+}
+
 class RoundControl extends StatelessWidget {
   const RoundControl(this.icon, this.label, this.onPressed, {super.key});
   final IconData icon;
@@ -307,6 +354,11 @@ class RoundControl extends StatelessWidget {
     icon: Icon(icon, size: 21),
   );
 }
+
+Route<T> platformPageRoute<T>(BuildContext context, WidgetBuilder builder) =>
+    Theme.of(context).platform == TargetPlatform.iOS
+    ? CupertinoPageRoute<T>(builder: builder)
+    : MaterialPageRoute<T>(builder: builder);
 
 PreferredSizeWidget secondaryBar(
   BuildContext context, {
@@ -336,42 +388,46 @@ class ActionFooter extends StatelessWidget {
     required this.onPressed,
     this.busy = false,
     this.secondary,
+    this.width = Space.formWidth,
     super.key,
   });
   final String label;
   final VoidCallback? onPressed;
   final bool busy;
   final Widget? secondary;
+  final double width;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: context.colors.background,
-    child: SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 10),
-      child: Center(
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 2),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FilledButton(
-                  onPressed: busy ? null : onPressed,
-                  child: busy
-                      ? const SizedBox.square(
-                          dimension: 19,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(label, textAlign: TextAlign.center),
-                ),
-                if (secondary != null) Center(child: secondary!),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    minimum: const EdgeInsets.only(bottom: 10),
+    child: Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width),
+        child: LayoutBuilder(
+          builder: (context, limits) {
+            final side = Space.pageInset(limits.maxWidth);
+            return Padding(
+              padding: EdgeInsets.fromLTRB(side, Space.sm, side, 2),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(
+                    onPressed: busy ? null : onPressed,
+                    child: busy
+                        ? const SizedBox.square(
+                            dimension: 19,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(label, textAlign: TextAlign.center),
+                  ),
+                  if (secondary != null) Center(child: secondary!),
+                ],
+              ),
+            );
+          },
         ),
       ),
     ),
@@ -382,20 +438,20 @@ class FormLayout extends StatelessWidget {
   const FormLayout({
     required this.title,
     required this.children,
-    required this.footer,
-    this.width = 720,
+    this.footer,
+    this.width = Space.formWidth,
     super.key,
   });
   final String title;
   final List<Widget> children;
-  final Widget footer;
+  final Widget? footer;
   final double width;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: secondaryBar(context, title: title, back: 'Cancel'),
     body: ScreenScroll(width: width, children: children),
-    bottomNavigationBar: KeyboardFooter(child: footer),
+    bottomNavigationBar: footer == null ? null : KeyboardFooter(child: footer!),
   );
 }
 
@@ -416,18 +472,21 @@ class RowLink extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.detail,
+    this.detailStyle,
     this.icon,
     this.onTap,
     this.leading,
     this.separator = true,
+    this.showChevron = true,
     super.key,
   });
   final String title;
   final String? subtitle, detail;
+  final TextStyle? detailStyle;
   final IconData? icon;
   final Widget? leading;
   final VoidCallback? onTap;
-  final bool separator;
+  final bool separator, showChevron;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -444,6 +503,7 @@ class RowLink extends StatelessWidget {
                 children: [
                   if (leading != null) ...[leading!, const SizedBox(width: 12)],
                   Expanded(
+                    flex: 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -456,17 +516,18 @@ class RowLink extends StatelessWidget {
                     ),
                   ),
                   if (detail != null)
-                    Flexible(
+                    Expanded(
+                      flex: 2,
                       child: Padding(
                         padding: const EdgeInsets.only(left: Space.sm),
                         child: Text(
                           detail!,
-                          style: context.type.bodySmall,
+                          style: detailStyle ?? context.type.bodySmall,
                           textAlign: TextAlign.end,
                         ),
                       ),
                     ),
-                  if (icon != null || onTap != null) ...[
+                  if (icon != null || (onTap != null && showChevron)) ...[
                     const SizedBox(width: Space.sm),
                     Icon(
                       icon ?? LucideIcons.chevronRight,
@@ -564,6 +625,7 @@ Future<T?> chooseOption<T extends Object>(
   String title,
   List<({T value, String label, String? subtitle})> options, {
   T? selected,
+  Widget? Function(T value, String label)? leading,
 }) => showModalBottomSheet<T>(
   useRootNavigator: true,
   context: context,
@@ -589,6 +651,7 @@ Future<T?> chooseOption<T extends Object>(
             child: RowLink(
               title: option.label,
               subtitle: option.subtitle,
+              leading: leading?.call(option.value, option.label),
               icon: option.value == selected
                   ? LucideIcons.check
                   : LucideIcons.chevronRight,
@@ -600,16 +663,46 @@ Future<T?> chooseOption<T extends Object>(
   ),
 );
 
+InputDecoration lineInput(
+  BuildContext context, {
+  required String label,
+  String? error,
+  String? suffix,
+}) {
+  final line = UnderlineInputBorder(
+    borderSide: BorderSide(color: context.colors.border),
+  );
+  final errorLine = UnderlineInputBorder(
+    borderSide: BorderSide(color: context.colors.danger),
+  );
+  return InputDecoration(
+    filled: false,
+    labelText: label,
+    labelStyle: context.type.bodyMedium?.copyWith(color: context.colors.muted),
+    floatingLabelBehavior: FloatingLabelBehavior.never,
+    errorText: error,
+    suffixText: suffix,
+    contentPadding: const EdgeInsets.symmetric(vertical: Space.sm),
+    border: line,
+    enabledBorder: line,
+    focusedBorder: UnderlineInputBorder(
+      borderSide: BorderSide(color: context.colors.green, width: 1.5),
+    ),
+    errorBorder: errorLine,
+    focusedErrorBorder: errorLine,
+  );
+}
+
 class SearchInput extends StatelessWidget {
   const SearchInput({
     required this.hint,
-    required this.onChanged,
+    this.onChanged,
     this.autofocus = false,
     this.controller,
     super.key,
   });
   final String hint;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String>? onChanged;
   final bool autofocus;
   final TextEditingController? controller;
 

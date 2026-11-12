@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import 'import_plan.dart';
 import 'transfer_codec.dart';
@@ -191,21 +192,27 @@ class _TransferPageState extends ConsumerState<TransferPage> {
       CreateMappedExercise() => '',
       null => null,
     };
-    final target = await chooseOption<String>(context, 'Map ${record.name}', [
-      (
-        value: '',
-        label: 'Create an exercise',
-        subtitle: 'Choose a unique name',
-      ),
-      for (final x in candidates)
+    final target = await chooseOption<String>(
+      context,
+      'Map ${record.name}',
+      [
         (
-          value: x.id,
-          label: x.name,
-          subtitle: x.archived
-              ? 'Archived · stays archived'
-              : x.measurement.label,
+          value: '',
+          label: 'Create an exercise',
+          subtitle: 'Choose a unique name',
         ),
-    ], selected: selected);
+        for (final x in candidates)
+          (
+            value: x.id,
+            label: x.name,
+            subtitle: x.archived
+                ? 'Archived · stays archived'
+                : x.measurement.label,
+          ),
+      ],
+      selected: selected,
+      leading: (id, name) => id.isEmpty ? null : ExerciseIcon(name),
+    );
     if (!mounted || target == null) return;
     ExerciseMapping mapping;
     if (target.isEmpty) {
@@ -546,11 +553,11 @@ class _TransferPageState extends ConsumerState<TransferPage> {
               top: 0,
               subtitle: widget.activity
                   ? 'Bring in records you already logged in a chat.'
-                  : 'Restore a V backup saved as JSON.',
+                  : 'Restore a backup saved as JSON.',
             ),
             if (widget.activity) ...[
               Text(
-                'Copy the prompt into your chat. Paste the JSON it returns here, or open it as a file. V reads the file on this device.',
+                'Copy the prompt into your chat. Paste the JSON it returns here, or open it as a file. The app reads the file on this device.',
                 style: context.type.bodyMedium,
               ),
               const SizedBox(height: 8),

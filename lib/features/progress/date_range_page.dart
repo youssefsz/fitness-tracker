@@ -4,7 +4,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/ui.dart';
-import 'performance_chart.dart';
 
 typedef RangeSelection = ({
   RangePreset preset,
@@ -23,8 +22,9 @@ Future<RangeSelection?> selectRange(
   RangeSelection initial,
   CalendarDay today,
 ) => Navigator.of(context, rootNavigator: true).push<RangeSelection>(
-  MaterialPageRoute(
-    builder: (_) => DateRangePage(initial: initial, today: today),
+  platformPageRoute<RangeSelection>(
+    context,
+    (_) => DateRangePage(initial: initial, today: today),
   ),
 );
 
@@ -62,18 +62,19 @@ class _DateRangePageState extends State<DateRangePage> {
   @override
   Widget build(BuildContext context) {
     final invalid = _preset == RangePreset.custom && _start.isAfter(_end);
+    final pinAction =
+        MediaQuery.sizeOf(context).height < 650 ||
+        MediaQuery.textScalerOf(context).scale(16) > 22;
+    void apply() =>
+        Navigator.pop(context, (preset: _preset, start: _start, end: _end));
     return FormLayout(
       title: 'Date range',
-      footer: ActionFooter(
-        label: 'Apply range',
-        onPressed: invalid
-            ? null
-            : () => Navigator.pop(context, (
-                preset: _preset,
-                start: _start,
-                end: _end,
-              )),
-      ),
+      footer: pinAction
+          ? ActionFooter(
+              label: 'Apply range',
+              onPressed: invalid ? null : apply,
+            )
+          : null,
       children: [
         const SizedBox(height: 8),
         RadioGroup<RangePreset>(
@@ -98,19 +99,27 @@ class _DateRangePageState extends State<DateRangePage> {
         if (_preset == RangePreset.custom) ...[
           const SizedBox(height: 16),
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: Space.md,
+            runSpacing: Space.sm,
             children: [
-              FilterButton(
-                'From ${fullDay(_start)}',
-                () => _change(true),
-                icon: LucideIcons.calendarDays,
-              ),
-              FilterButton(
-                'To ${fullDay(_end)}',
-                () => _change(false),
-                icon: LucideIcons.calendarDays,
-              ),
+              for (final (label, date, start) in [
+                ('From', _start, true),
+                ('To', _end, false),
+              ])
+                SizedBox(
+                  width: 156,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: context.type.bodySmall),
+                      RowLink(
+                        title: fullDay(date),
+                        icon: LucideIcons.calendarDays,
+                        onTap: () => _change(start),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -126,6 +135,13 @@ class _DateRangePageState extends State<DateRangePage> {
           'Statistics use only the records in this range.',
           style: context.type.bodySmall,
         ),
+        if (!pinAction) ...[
+          const SizedBox(height: Space.xxl),
+          FilledButton(
+            onPressed: invalid ? null : apply,
+            child: const Text('Apply range'),
+          ),
+        ],
       ],
     );
   }

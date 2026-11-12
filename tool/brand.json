@@ -1,8 +1,8 @@
 {
-  "name": "V",
-  "lightBackground": "#FAFBF8",
-  "darkBackground": "#141D17",
-  "darkInk": "#EDF4EB",
+  "name": "Fitness Tracker",
+  "lightBackground": "#FAFAFA",
+  "darkBackground": "#121212",
+  "darkInk": "#F2F2F2",
   "ink": "#19271F",
   "accent": "#B5EC7C"
 }

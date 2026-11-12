@@ -7,8 +7,10 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../history/entry_row.dart';
+import '../logging/log_page.dart';
 import '../progress/performance_chart.dart';
 
 class OverviewPage extends ConsumerWidget {
@@ -67,7 +69,7 @@ class OverviewPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 22),
                       FilledButton(
-                        onPressed: () => context.push('/log'),
+                        onPressed: () => showLogSheet(context),
                         child: const Text('Record your first result'),
                       ),
                       const SizedBox(height: 4),
@@ -92,6 +94,12 @@ class OverviewPage extends ConsumerWidget {
                 final map = {
                   for (final row in items) row.exercise.id: row.exercise,
                 };
+                final recentByDay = <CalendarDay, List<Entry>>{};
+                for (final entry in data.recent) {
+                  if (map.containsKey(entry.exerciseId)) {
+                    (recentByDay[entry.day] ??= []).add(entry);
+                  }
+                }
                 return ResponsiveSplit(
                   main: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,15 +130,22 @@ class OverviewPage extends ConsumerWidget {
                           () => context.go('/history'),
                         ),
                       ),
-                      for (final entry in data.recent)
-                        if (map[entry.exerciseId] case final exercise?)
+                      for (final group in recentByDay.entries) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.sm),
+                          child: Text(
+                            fullDay(group.key),
+                            style: context.type.bodySmall,
+                          ),
+                        ),
+                        for (final entry in group.value)
                           EntryRow(
                             key: ValueKey(entry.id),
                             entry: entry,
-                            exercise: exercise,
+                            exercise: map[entry.exerciseId]!,
                             compact: true,
-                            showDate: true,
                           ),
+                      ],
                     ],
                   ),
                 );
@@ -171,7 +186,18 @@ class _ExerciseSummary extends StatelessWidget {
                   final identity = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(exercise.name, style: context.type.titleMedium),
+                      Row(
+                        children: [
+                          ExerciseIcon(exercise.name),
+                          const SizedBox(width: Space.sm),
+                          Flexible(
+                            child: Text(
+                              exercise.name,
+                              style: context.type.titleMedium,
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 3),
                       Text(
                         'Best ${measure(summary.best, measurement, style)} · First ${measure(summary.first, measurement, style)}',

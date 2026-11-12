@@ -64,7 +64,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Size(1, 1);
       final date = CalendarDay.fromDate(clock).iso;
       await fileSystem.share(
-        'v-${csv ? 'sets' : 'backup'}-$date.${csv ? 'csv' : 'json'}',
+        'fitness-tracker-${csv ? 'sets' : 'backup'}-$date.${csv ? 'csv' : 'json'}',
         content,
         rect,
         csv: csv,
@@ -106,11 +106,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             excludeFromSemantics: true,
           ),
           const SizedBox(width: 8),
-          const Text(Branding.name),
+          const Flexible(child: Text(Branding.name)),
         ],
       ),
       content: const Text(
-        'A personal exercise log for repetitions and timed sets. V stores your records locally. Export a backup to move them to another device.',
+        'A personal exercise log for repetitions and timed sets. Your records are stored on this device. Export a backup to move them to another device.',
       ),
       actions: [
         TextButton(
@@ -261,7 +261,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               FormProblem(_problem),
               const SizedBox(height: 10),
               Text(
-                'V does not sync your records. Keep a backup somewhere safe.',
+                'Your records are stored on this device. Keep a backup somewhere safe.',
                 style: context.type.bodySmall,
               ),
               const SizedBox(height: 26),

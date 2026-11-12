@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPage;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,13 +19,17 @@ import 'theme.dart';
 GoRouter createRouter() => GoRouter(
   routes: [
     StatefulShellRoute.indexedStack(
-      builder: (context, state, shell) => PrimaryShell(shell: shell),
+      pageBuilder: (context, state, shell) =>
+          _platformPage(context, state, PrimaryShell(shell: shell)),
       branches: [
         StatefulShellBranch(
           routes: [
             GoRoute(
               path: '/',
-              builder: (context, state) => const OverviewPage(),
+              pageBuilder: (context, state) => NoTransitionPage<void>(
+                key: state.pageKey,
+                child: const OverviewPage(),
+              ),
             ),
           ],
         ),
@@ -32,7 +37,10 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/progress',
-              builder: (context, state) => const ProgressPage(),
+              pageBuilder: (context, state) => NoTransitionPage<void>(
+                key: state.pageKey,
+                child: const ProgressPage(),
+              ),
             ),
           ],
         ),
@@ -40,7 +48,10 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/history',
-              builder: (context, state) => const HistoryPage(),
+              pageBuilder: (context, state) => NoTransitionPage<void>(
+                key: state.pageKey,
+                child: const HistoryPage(),
+              ),
             ),
           ],
         ),
@@ -48,26 +59,41 @@ GoRouter createRouter() => GoRouter(
     ),
     GoRoute(
       path: '/settings',
-      builder: (context, state) => const SettingsPage(),
+      pageBuilder: (context, state) =>
+          _platformPage(context, state, const SettingsPage()),
     ),
     GoRoute(
       path: '/exercises',
-      builder: (context, state) => const ExerciseLibrary(),
+      pageBuilder: (context, state) =>
+          _platformPage(context, state, const ExerciseLibrary()),
     ),
     GoRoute(
       path: '/exercise/:id',
-      builder: (context, state) =>
-          ExerciseDetail(id: state.pathParameters['id']!),
+      pageBuilder: (context, state) => _platformPage(
+        context,
+        state,
+        ExerciseDetail(id: state.pathParameters['id']!),
+      ),
     ),
     GoRoute(
       path: '/log',
-      builder: (context, state) => LogPage(request: state.extra as LogRequest?),
+      redirect: (_, state) =>
+          (state.extra as LogRequest?)?.entry == null ? '/' : null,
+      pageBuilder: (context, state) => _platformPage(
+        context,
+        state,
+        LogPage(request: state.extra as LogRequest),
+      ),
     ),
     GoRoute(
       path: '/transfer/:kind',
-      builder: (context, state) => TransferPage(
-        activity: state.pathParameters['kind'] == 'activity',
-        recoveryFile: state.extra as String?,
+      pageBuilder: (context, state) => _platformPage(
+        context,
+        state,
+        TransferPage(
+          activity: state.pathParameters['kind'] == 'activity',
+          recoveryFile: state.extra as String?,
+        ),
       ),
     ),
   ],
@@ -85,6 +111,14 @@ GoRouter createRouter() => GoRouter(
     ),
   ),
 );
+
+Page<void> _platformPage(
+  BuildContext context,
+  GoRouterState state,
+  Widget child,
+) => Theme.of(context).platform == TargetPlatform.iOS
+    ? CupertinoPage<void>(key: state.pageKey, child: child)
+    : MaterialPage<void>(key: state.pageKey, child: child);
 
 class PrimaryShell extends ConsumerWidget {
   const PrimaryShell({required this.shell, super.key});
@@ -126,7 +160,7 @@ class PrimaryShell extends ConsumerWidget {
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () => context.push('/log'),
+                          onTap: () => showLogSheet(context),
                           child: const SizedBox.square(
                             dimension: 56,
                             child: Center(
@@ -161,6 +195,7 @@ class _Capsule extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onSelect;
   static const labels = ['Overview', 'Progress', 'History'];
+  static const shape = StadiumBorder();
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -177,47 +212,127 @@ class _Capsule extends StatelessWidget {
     ),
     child: Padding(
       padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          for (final (i, label) in labels.indexed)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: i == selected,
-                child: Material(
-                  color: i == selected
-                      ? context.colors.pill
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(100),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(100),
-                    onTap: () => onSelect(i),
-                    child: SizedBox(
-                      height: 48,
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              style: context.type.labelLarge?.copyWith(
-                                color: i == selected
-                                    ? context.colors.onPill
-                                    : context.colors.ink,
+      child: SizedBox(
+        height: Space.target,
+        child: LayoutBuilder(
+          builder: (context, limits) {
+            final tabWidth = limits.maxWidth / labels.length;
+            final rtl = Directionality.of(context) == TextDirection.rtl;
+            final selectedPosition =
+                (rtl ? labels.length - 1 - selected : selected).toDouble();
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: selectedPosition, end: selectedPosition),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 190),
+              curve: Curves.easeOutCubic,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Row(
+                  children: [
+                    for (final (i, label) in labels.indexed)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          selected: i == selected,
+                          child: InkWell(
+                            customBorder: shape,
+                            onTap: () => onSelect(i),
+                            child: _TabLabel(
+                              Text(
+                                label,
+                                maxLines: 1,
+                                style: context.type.labelLarge,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
               ),
-            ),
-        ],
+              builder: (context, position, tabs) {
+                final bounds = Rect.fromLTWH(
+                  position * tabWidth,
+                  0,
+                  tabWidth,
+                  Space.target,
+                );
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Positioned.fromRect(
+                      rect: bounds,
+                      child: DecoratedBox(
+                        key: const ValueKey('primary-tab-indicator'),
+                        decoration: ShapeDecoration(
+                          color: context.colors.pill,
+                          shape: shape,
+                        ),
+                      ),
+                    ),
+                    tabs!,
+                    // Draw the light lettering only where the pill is beneath it.
+                    IgnorePointer(
+                      child: ExcludeSemantics(
+                        child: ClipPath(
+                          clipper: _PillClipper(bounds),
+                          child: Row(
+                            children: [
+                              for (final label in labels)
+                                Expanded(
+                                  child: _TabLabel(
+                                    RichText(
+                                      maxLines: 1,
+                                      textScaler: MediaQuery.textScalerOf(
+                                        context,
+                                      ),
+                                      text: TextSpan(
+                                        text: label,
+                                        style: context.type.labelLarge
+                                            ?.copyWith(
+                                              color: context.colors.onPill,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
       ),
     ),
   );
+}
+
+class _TabLabel extends StatelessWidget {
+  const _TabLabel(this.child);
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: FittedBox(fit: BoxFit.scaleDown, child: child),
+    ),
+  );
+}
+
+class _PillClipper extends CustomClipper<Path> {
+  const _PillClipper(this.bounds);
+  final Rect bounds;
+
+  @override
+  Path getClip(Size size) => _Capsule.shape.getOuterPath(bounds);
+
+  @override
+  bool shouldReclip(_PillClipper oldClipper) => bounds != oldClipper.bounds;
 }

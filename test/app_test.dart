@@ -101,6 +101,131 @@ Future<void> tapText(WidgetTester tester, String text) async {
 }
 
 void main() {
+  for (final (appearance, background, surface) in [
+    (Appearance.light, const Color(0xfffafafa), Colors.white),
+    (Appearance.dark, const Color(0xff121212), const Color(0xff1d1d1d)),
+  ]) {
+    testWidgets('activity date uses neutral ${appearance.name} colors', (
+      tester,
+    ) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      await repo.createExercise('Push-ups', Measurement.repetitions);
+      await repo.savePreferences((
+        appearance: appearance,
+        duration: DurationStyle.clock,
+        haptics: false,
+      ));
+      try {
+        await _pumpApp(tester, repo);
+        expect(
+          Theme.of(tester.element(visibleText('Start with one result.')))
+              .scaffoldBackgroundColor,
+          background,
+        );
+        await tester.tap(find.byTooltip('Add entry'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Push-ups');
+        await tapText(tester, 'Change');
+        final dialog = find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.byType(Dialog),
+        );
+        expect(tester.widget<Dialog>(dialog).backgroundColor, surface);
+      } finally {
+        await clean(tester, repo);
+      }
+    });
+  }
+
+  testWidgets(
+    'log sheet dismisses by backdrop and drag with draft protection',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      await repo.createExercise('Push-ups', Measurement.repetitions);
+      try {
+        await _pumpApp(tester, repo);
+        final add = find.byTooltip('Add entry');
+        const backdrop = Offset(20, 34);
+        final sheet = find.byType(BottomSheet);
+        await tester.tap(add);
+        await tester.pumpAndSettle();
+        await tester.tapAt(backdrop);
+        await tester.pumpAndSettle();
+        expect(sheet, findsNothing);
+
+        await tester.tap(add);
+        await tester.pumpAndSettle();
+        final top = tester.getTopLeft(sheet).dy;
+        final drag = await tester.startGesture(Offset(201, top + 16));
+        await drag.moveBy(const Offset(0, 25));
+        await drag.moveBy(const Offset(0, 145));
+        await tester.pump();
+        expect(tester.getTopLeft(sheet).dy, greaterThan(top));
+        await drag.moveBy(const Offset(0, 320));
+        await drag.up();
+        await tester.pumpAndSettle();
+        expect(sheet, findsNothing);
+
+        await tester.tap(add);
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Push-ups');
+        await tester.enterText(find.byType(TextFormField), '19');
+        await tester.tapAt(backdrop);
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tapText(tester, 'Cancel');
+        expect(visibleText('19'), findsOneWidget);
+
+        await tester.dragFrom(
+          Offset(201, tester.getTopLeft(sheet).dy + 16),
+          const Offset(0, 520),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tapText(tester, 'Discard');
+        expect(sheet, findsNothing);
+        expect((await repo.snapshot()).entries, isEmpty);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
+    'creating an exercise stays in the log sheet and keeps the draft',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      await repo.createExercise('Push-ups', Measurement.repetitions);
+      try {
+        await _pumpApp(tester, repo);
+        await tester.tap(find.byTooltip('Add entry'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Push-ups');
+        await tester.enterText(find.byType(TextFormField), '19');
+        await tapText(tester, 'Add another exercise');
+        final sheet = tester.element(find.byType(BottomSheet));
+        await tapText(tester, 'Create exercise');
+        expect(visibleText('New exercise'), findsOneWidget);
+        expect(tester.element(find.byType(BottomSheet)), same(sheet));
+        await tester.enterText(find.byType(TextField), 'Unfinished exercise');
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tapText(tester, 'Discard');
+        expect(visibleText('Choose exercise'), findsOneWidget);
+        await tapText(tester, 'Create exercise');
+        await tester.enterText(find.byType(TextField), 'Squats');
+        await tapText(tester, 'Create exercise');
+        expect(tester.element(find.byType(BottomSheet)), same(sheet));
+        expect(visibleText('Save 2 sets'), findsOneWidget);
+        expect(visibleText('19'), findsOneWidget);
+        expect(visibleText('Squats'), findsOneWidget);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
   testWidgets(
     'empty, validation, retained draft, double save guard and haptic preference',
     (tester) async {
@@ -113,13 +238,21 @@ void main() {
         await _pumpApp(tester, repo, feedback: feedback);
         expect(find.text('Start with one result.'), findsOneWidget);
         await tapText(tester, 'Record your first result');
+        expect(find.byType(BottomSheet), findsOneWidget);
         await tapText(tester, 'Push-ups');
         await tapText(tester, 'Save 1 set');
         expect(find.textContaining('Enter a whole number'), findsOneWidget);
         await tester.enterText(find.byType(TextFormField).first, '22');
         await tapText(tester, 'Add set');
         await tester.enterText(find.byType(TextFormField).at(1), '18');
-        await tapText(tester, 'Cancel');
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(visibleText('Choose exercise'), findsOneWidget);
+        await tapText(tester, 'Continue to sets');
+        expect(visibleText('22'), findsOneWidget);
+        expect(visibleText('18'), findsOneWidget);
+        await tester.tap(find.byTooltip('Cancel entry'));
+        await tester.pumpAndSettle();
         expect(find.text('Discard changes?'), findsOneWidget);
         await tester.tap(
           find.descendant(
@@ -171,13 +304,102 @@ void main() {
     },
   );
 
+  testWidgets('correcting an exercise keeps compatible draft sets', (
+    tester,
+  ) async {
+    final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+    await repo.createExercise('Push-ups', Measurement.repetitions);
+    await repo.createExercise('Pull-ups', Measurement.repetitions);
+    await repo.createExercise('Plank', Measurement.duration);
+    try {
+      await _pumpApp(tester, repo);
+      await tapText(tester, 'Record your first result');
+      await tapText(tester, 'Push-ups');
+      await tester.enterText(find.byType(TextFormField).first, '12');
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Pull-ups');
+      expect(visibleText('Pull-ups'), findsOneWidget);
+      expect(visibleText('12'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Plank');
+      expect(find.text('Switch to Plank?'), findsOneWidget);
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Continue to sets');
+      expect(visibleText('Pull-ups'), findsOneWidget);
+      expect(visibleText('12'), findsOneWidget);
+
+      await tapText(tester, 'Add another exercise');
+      await tapText(tester, 'Plank');
+      expect(visibleText('12'), findsOneWidget);
+      expect(visibleText('Save 2 sets'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(visibleText('Plank'), findsOneWidget);
+      expect(visibleText('Pull-ups'), findsNothing);
+      await tapText(tester, 'Continue to sets');
+      expect(visibleText('12'), findsOneWidget);
+      expect((await repo.snapshot()).entries, isEmpty);
+    } finally {
+      await clean(tester, repo);
+    }
+  });
+
+  testWidgets(
+    'iOS edge swipe returns from Settings and only the tab pill slides',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      try {
+        await _pumpApp(tester, repo);
+        await tester.tap(find.byTooltip('Settings'));
+        await tester.pumpAndSettle();
+        expect(visibleText('Settings'), findsOneWidget);
+        await tester.dragFrom(const Offset(1, 280), const Offset(330, 0));
+        await tester.pumpAndSettle();
+        expect(visibleText('Start with one result.'), findsOneWidget);
+        final pill = find.byKey(const ValueKey('primary-tab-indicator'));
+        final start = tester.getCenter(pill).dx;
+        final destination = tester.getCenter(visibleText('Progress')).dx;
+        await tester.tap(visibleText('Progress'));
+        await tester.pump();
+        expect(visibleText('See how your sets change'), findsOneWidget);
+        expect(tester.getCenter(pill).dx, start);
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(tester.getCenter(pill).dx, inExclusiveRange(start, destination));
+        await tester.pumpAndSettle();
+        expect(tester.getCenter(pill).dx, closeTo(destination, 0.01));
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
+
+  testWidgets('reduced motion moves the tab pill immediately', (tester) async {
+    final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+    try {
+      await _pumpApp(tester, repo, reducedMotion: true);
+      final history = visibleText('History');
+      final destination = tester.getCenter(history).dx;
+      await tester.tap(history);
+      await tester.pump();
+      final pill = find.byKey(const ValueKey('primary-tab-indicator'));
+      expect(tester.getCenter(pill).dx, closeTo(destination, 0.01));
+    } finally {
+      await clean(tester, repo);
+    }
+  });
+
   testWidgets(
     'bootstrap failure is recoverable and never presents an empty dashboard first',
     (tester) async {
       final repo = _RetryRepository(TrackerDatabase(NativeDatabase.memory()));
       try {
         await _pumpApp(tester, repo);
-        expect(find.text('V couldn’t open your records'), findsOneWidget);
+        expect(find.text('Couldn’t open your records'), findsOneWidget);
         expect(find.text('Start with one result.'), findsNothing);
         await tapText(tester, 'Try again');
         expect(find.text('Start with one result.'), findsOneWidget);

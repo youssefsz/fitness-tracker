@@ -1,24 +1,23 @@
-"""Resize the supplied V masters and generate the native launch assets."""
+"""Resize the brand masters and generate the native launch assets."""
 import json
 import plistlib
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PIL import Image, ImageColor, ImageDraw, ImageFont
+from PIL import Image, ImageColor
 
 root = Path(__file__).resolve().parents[1]
 brand = json.loads((root / "tool/brand.json").read_text())
 name = brand["name"]
-masters = root / "docs/reference/brand"
+masters = root / "tool/brand_sources"
 ios = root / "ios/Runner"
 catalog = ios / "Assets.xcassets"
 res = root / "android/app/src/main/res"
-icon = Image.open(masters / "v-app-icon.png").convert("RGB")
-mark = Image.open(masters / "v-logo-dark.png").convert("RGBA")
+icon = Image.open(masters / "app-icon.png").convert("RGB")
+mark = Image.open(masters / "mark.png").convert("RGBA")
 alpha = mark.getchannel("A")
 resample = Image.Resampling.LANCZOS
-font = Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf")
 
 
 def save(image, path):
@@ -48,14 +47,7 @@ def place(canvas, image, side, center):
     canvas.alpha_composite(resized, (round(center[0] - side / 2), round(center[1] - side / 2)))
 
 
-def text_on(image, center, size, color):
-    ImageDraw.Draw(image).text(
-        center, name, font=ImageFont.truetype(str(font), size),
-        fill=color, anchor="mm",
-    )
-
-
-save(mark.resize((144, 144), resample), root / "assets/brand/v-mark.png")
+save(mark.resize((144, 144), resample), root / "assets/brand/mark.png")
 
 # Apple's square source stays opaque. Each catalog slot keeps its original scale.
 app_icons = catalog / "AppIcon.appiconset"
@@ -63,7 +55,8 @@ for slot in json.loads((app_icons / "Contents.json").read_text())["images"]:
     size = round(float(slot["size"].split("x")[0]) * int(slot["scale"][0]))
     save(icon.resize((size, size), resample), app_icons / slot["filename"])
 
-launch_images = catalog / "LaunchImage.imageset"
+launch_mark_name = "FitnessTrackerLaunchMark"
+launch_images = catalog / f"{launch_mark_name}.imageset"
 variants = []
 backdrops = []
 colors = []
@@ -83,24 +76,15 @@ for dark in (False, True):
     backdrops.append({"idiom": "universal", "filename": backdrop, **appearance})
     ink_image = tint(ink)
     for scale in (1, 2, 3):
-        file = f"LaunchImage{suffix}@{scale}x.png"
-        splash_mark = Image.new("RGBA", (104 * scale, 112 * scale))
-        place(splash_mark, ink_image, 78 * scale, (52 * scale, 44 * scale))
-        text_on(splash_mark, (52 * scale, 91 * scale), 15 * scale, ink)
-        save(splash_mark, launch_images / file)
+        file = f"{launch_mark_name}{suffix}@{scale}x.png"
+        save(ink_image.resize((78 * scale, 78 * scale), resample), launch_images / file)
         variants.append({"idiom": "universal", "filename": file, "scale": f"{scale}x", **appearance})
     qualifier = "-night" if dark else ""
-    pre_s = Image.new("RGBA", (440, 500))
-    place(pre_s, ink_image, 304, (220, 193))
-    text_on(pre_s, (220, 399), 62, ink)
-    save(pre_s, res / f"drawable{qualifier}-xxxhdpi/v_launch.png")
+    save(ink_image.resize((312, 312), resample), res / f"drawable{qualifier}-xxxhdpi/launch_mark.png")
     splash = Image.new("RGBA", (1152, 1152))
     # Android's splash masks a 192 dp safe circle inside the 288 dp viewport.
     place(splash, ink_image, 596, (576, 576))
-    save(splash, res / f"drawable{qualifier}-xxxhdpi/v_splash_icon.png")
-    word = Image.new("RGBA", (800, 320))
-    text_on(word, (400, 160), 72, ink)
-    save(word, res / f"drawable{qualifier}-xxxhdpi/v_splash_brand.png")
+    save(splash, res / f"drawable{qualifier}-xxxhdpi/splash_mark.png")
     write(res / f"values{qualifier}/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launch_background">{bg}</color>
@@ -129,7 +113,7 @@ for variation in ("", "-v21"):
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launch_background" />
     <item>
-        <bitmap android:gravity="center" android:src="@drawable/v_launch" />
+        <bitmap android:gravity="center" android:src="@drawable/launch_mark" />
     </item>
 </layer-list>
 """)
@@ -140,8 +124,7 @@ for dark in (False, True):
         flags = f'        <item name="android:windowLightStatusBar">{str(not dark).lower()}</item>'
         modern_items = """
         <item name="android:windowSplashScreenBackground">@color/launch_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/v_splash_icon</item>
-        <item name="android:windowSplashScreenBrandingImage">@drawable/v_splash_brand</item>""" if modern else ""
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>""" if modern else ""
         launch_window = "@color/launch_background" if modern else "@drawable/launch_background"
         write(res / f"values{q}/styles.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <resources>
@@ -174,6 +157,6 @@ write(root / "lib/app/branding.dart", f"""// Generated by tool/generate_brand_as
 abstract final class Branding {{
   static const name = '{name}';
   static const version = '{version}';
-  static const mark = 'assets/brand/v-mark.png';
+  static const mark = 'assets/brand/mark.png';
 }}
 """)
