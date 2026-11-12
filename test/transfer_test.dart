@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:fitness_tracker/features/data_transfer/import_plan.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart';
+import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,12 +12,14 @@ BackupData data({
   List<Exercise> exercises = const [],
   List<Entry> entries = const [],
   Map<String, DateTime> receipts = const {},
+  BodyData? body,
 }) => BackupData(
   exercises: exercises,
   entries: entries,
   goals: [],
   preferences: defaultPreferences,
   receipts: receipts,
+  body: body,
 );
 Exercise exercise(
   String id,
@@ -48,7 +51,7 @@ Entry entry(
   updatedAt: time,
   sets: [
     for (final (i, value) in sets.indexed)
-      (id: '$id-$i', position: i, value: value),
+      (id: '$id-$i', position: i, value: value, reps: null),
   ],
 );
 
@@ -56,8 +59,10 @@ void main() {
   test('AI example and copied prompt share the validated contract', () {
     final example = activityExample(today);
     final batch = decodeActivity(example, today);
-    expect(batch.records.first.sets, [22, 20, 18]);
-    expect(batch.records.last.sets, [100, 90]);
+    expect(batch.records.first.sets.map((s) => s.value), [22, 20, 18]);
+    expect(batch.records[1].sets.map((s) => s.value), [100, 90]);
+    expect(batch.records[2].sets.single.value, 0);
+    expect(batch.records.last.sets.single, (id: null, value: 60000, reps: 8));
     expect(aiPrompt(time), contains(example));
     expect(aiPrompt(time), contains('UTC+00:00'));
     expect(
@@ -68,16 +73,20 @@ void main() {
 
   test('canonical receipts ignore JSON order and name spacing but preserve set order', () {
     final example = activityExample(today);
-    final canonical = decodeActivity(example, today);
+    final canonical = ActivityBatch(
+      decodeActivity(example, today).records.take(2),
+    );
     final same = decodeActivity('''{"records":[
       {"notes":null,"sets":[22,20,18],"exercise":{"measurement":"repetitions","name":"  PUSH-UPS "},"date":"2026-11-12"},
       {"notes":null,"sets":[100,90],"exercise":{"measurement":"duration","name":"Plank"},"date":"2026-11-12"}],
       "schemaVersion":1,"format":"fitness-activity-import"}''', today);
     expect(same.fingerprint, canonical.fingerprint);
     expect(
-      decodeActivity(
-        example.replaceFirst('22,\n        20', '20,\n        22'),
-        today,
+      ActivityBatch(
+        decodeActivity(
+          example.replaceFirst('22,\n        20', '20,\n        22'),
+          today,
+        ).records.take(2),
       ).fingerprint,
       isNot(canonical.fingerprint),
     );
@@ -88,16 +97,18 @@ void main() {
     for (final invalid in [
       example.replaceFirst(today.iso, '2026-11-13'),
       example.replaceFirst('22', '22.1'),
-      example.replaceFirst('22', '0'),
+      example.replaceFirst('22', '-1'),
       example.replaceFirst('"notes"', '"best"'),
-      example.replaceFirst('"schemaVersion": 1', '"schemaVersion": 2'),
+      example.replaceFirst('"schemaVersion": 2', '"schemaVersion": 3'),
     ]) {
       expect(() => decodeActivity(invalid, today), throwsFormatException);
     }
   });
 
   test('mapping requires explicit archived and mismatched unit decisions; flags overlaps', () {
-    final batch = decodeActivity(activityExample(today), today);
+    final batch = ActivityBatch(
+      decodeActivity(activityExample(today), today).records.take(2),
+    );
     final archived = exercise(
       'push',
       'Push-ups',
@@ -173,8 +184,55 @@ void main() {
     for (final invalid in [
       backup.replaceFirst('"exerciseId": "push"', '"exerciseId": "missing"'),
       backup.replaceFirst('"position": 1', '"position": 2'),
-      backup.replaceFirst('"schemaVersion": 1', '"schemaVersion": 2'),
+      backup.replaceFirst('"schemaVersion": 1', '"schemaVersion": 3'),
       backup.replaceFirst('"position": 1', '"position": 0'),
+    ]) {
+      expect(() => decodeBackup(invalid, today), throwsFormatException);
+    }
+  });
+
+  test('v2 validates weigh-ins and merges by measurement date', () {
+    final older = (day: today.plusDays(-3), grams: 81250);
+    final sameDate = (day: today, grams: 80000);
+    final local = data(
+      body: BodyData(
+        (
+          displayName: 'Sam',
+          heightMillimeters: null,
+          heightUnit: HeightUnit.ftIn,
+          weightUnit: WeightUnit.lb,
+        ),
+        [(day: today, grams: 80125)],
+      ),
+    );
+    final incoming = data(
+      body: BodyData(
+        (
+          displayName: 'Sami',
+          heightMillimeters: 1790,
+          heightUnit: HeightUnit.cm,
+          weightUnit: WeightUnit.kg,
+        ),
+        [older, sameDate],
+      ),
+    );
+    final json = encodeBackup(incoming, time);
+    final parsed = decodeBackup(json, today);
+    expect(parsed.body!.profile.heightUnit, HeightUnit.cm);
+    final plan = planBackup(local, parsed, RestoreMode.merge);
+    expect(plan.write.data.body!.profile, (
+      displayName: 'Sam',
+      heightMillimeters: 1790,
+      heightUnit: HeightUnit.ftIn,
+      weightUnit: WeightUnit.lb,
+    ));
+    expect(plan.write.data.body!.weighIns, [older]);
+    expect(plan.conflicts, hasLength(2));
+    for (final invalid in [
+      json.replaceFirst(older.day.iso, sameDate.day.iso),
+      json.replaceFirst('"grams": 81250', '"grams": 0'),
+      json.replaceFirst('"heightMillimeters": 1790', '"heightMillimeters": -1'),
+      json.replaceFirst('"weightUnit": "kg"', '"weightUnit": "oz"'),
     ]) {
       expect(() => decodeBackup(invalid, today), throwsFormatException);
     }

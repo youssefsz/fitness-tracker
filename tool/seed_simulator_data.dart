@@ -131,6 +131,7 @@ BackupData _demo(CalendarDay today) {
               (
                 id: 'v-demo-set-$order-$s',
                 position: s,
+                reps: null,
                 value: max(
                   1,
                   peak -
@@ -154,7 +155,14 @@ BackupData _demo(CalendarDay today) {
           order: order,
           createdAt: time,
           updatedAt: time,
-          sets: [(id: 'v-demo-set-$order-0', position: 0, value: 8 + i ~/ 17)],
+          sets: [
+            (
+              id: 'v-demo-set-$order-0',
+              position: 0,
+              value: 8 + i ~/ 17,
+              reps: null,
+            ),
+          ],
         ),
       );
     }

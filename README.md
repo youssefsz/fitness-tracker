@@ -22,13 +22,15 @@ The device ID above is the designated iPhone 17 simulator on the development hos
 
 ## Regenerate the brand assets
 
-Edit the display name in `tool/brand.json` and the version in `pubspec.yaml`. On macOS with Python and Pillow installed, run:
+Edit the display name in `tool/brand.json`. On macOS with Python and Pillow installed, run:
 
 ```sh
 python3 tool/generate_brand_assets.py
 ```
 
 The app icon and launch mark masters live in `tool/brand_sources`. The generator produces the Flutter logo in `assets/brand`, the iOS icon and launch catalogs, and the Android launcher and splash assets.
+
+Set the release version and build number in `pubspec.yaml` or through Flutter's build flags. The Profile footer reads the version and build number from the installed app.
 
 ## Load the simulator demo
 

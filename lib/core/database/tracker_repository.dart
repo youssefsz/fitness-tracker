@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import 'database.dart' hide Entry;
 
@@ -28,6 +29,7 @@ typedef CatalogItem = ({
   int count,
   CalendarDay? lastDay,
   int? latest,
+  bool hasGoal,
 });
 
 class TrackerRepository {
@@ -59,6 +61,7 @@ class TrackerRepository {
     id: row.id,
     name: row.name,
     measurement: Measurement.values.byName(row.measurement),
+    trackSets: row.trackSets,
     archived: row.archived,
     createdAt: DateTime.parse(row.createdAt),
     updatedAt: DateTime.parse(row.updatedAt),
@@ -82,8 +85,11 @@ class TrackerRepository {
           haptics: row.haptics,
         );
 
-  Stream<Preferences> watchPreferences() =>
-      db.select(db.appPreferences).watchSingleOrNull().map(_preferences);
+  Stream<Preferences> watchPreferences() => db
+      .select(db.appPreferences)
+      .watchSingleOrNull()
+      .map(_preferences)
+      .distinct();
 
   Future<void> savePreferences(Preferences value) => db
       .into(db.appPreferences)
@@ -96,6 +102,198 @@ class TrackerRepository {
         ),
       );
 
+  Stream<String?> watchProgressExercise() => db
+      .select(db.appPreferences)
+      .watchSingleOrNull()
+      .map((row) => row?.progressExerciseId)
+      .distinct();
+
+  Future<void> saveProgressExercise(String id) => db
+      .into(db.appPreferences)
+      .insert(
+        AppPreferencesCompanion.insert(
+          id: const Value(1),
+          appearance: defaultPreferences.appearance.name,
+          durationStyle: defaultPreferences.duration.name,
+          haptics: defaultPreferences.haptics,
+          progressExerciseId: Value(id),
+        ),
+        onConflict: DoUpdate(
+          (_) => AppPreferencesCompanion(progressExerciseId: Value(id)),
+        ),
+      );
+
+  ProfileDetails _profileDetails({
+    String? name,
+    int? height,
+    String? heightUnit,
+    String? weightUnit,
+  }) => (
+    displayName: name,
+    heightMillimeters: height,
+    heightUnit: heightUnit == null
+        ? defaultProfileDetails.heightUnit
+        : HeightUnit.values.byName(heightUnit),
+    weightUnit: weightUnit == null
+        ? defaultProfileDetails.weightUnit
+        : WeightUnit.values.byName(weightUnit),
+  );
+
+  Stream<LocalProfile> watchProfile() => db
+      .select(db.localProfiles)
+      .watchSingleOrNull()
+      .map(
+        (row) => LocalProfile(
+          _profileDetails(
+            name: row?.displayName,
+            height: row?.heightMillimeters,
+            heightUnit: row?.heightUnit,
+            weightUnit: row?.weightUnit,
+          ),
+          row?.photo,
+          row == null
+              ? AvatarPreset.anonymous
+              : AvatarPreset.values.byName(row.avatarPreset),
+        ),
+      );
+
+  Future<void> saveProfileDetails(ProfileDetails details) async {
+    final name = details.displayName?.trim();
+    final height = details.heightMillimeters;
+    if (displayNameError(name ?? '') case final error?) {
+      throw TrackerException(error);
+    }
+    if (height != null && (height < 1 || height > maxHeightMillimeters)) {
+      throw const TrackerException('Enter a height from 0.1 to 300 cm.');
+    }
+    await db
+        .into(db.localProfiles)
+        .insertOnConflictUpdate(
+          LocalProfilesCompanion(
+            id: const Value(1),
+            displayName: Value(name == null || name.isEmpty ? null : name),
+            heightMillimeters: Value(height),
+            heightUnit: Value(details.heightUnit.name),
+            weightUnit: Value(details.weightUnit.name),
+          ),
+        );
+  }
+
+  Future<void> saveProfilePhoto(Uint8List? photo) async {
+    if (photo != null &&
+        (photo.isEmpty || photo.length > maxProfilePhotoBytes)) {
+      throw const TrackerException('Choose a smaller photo.');
+    }
+    await db
+        .into(db.localProfiles)
+        .insertOnConflictUpdate(
+          LocalProfilesCompanion(id: const Value(1), photo: Value(photo)),
+        );
+  }
+
+  Future<void> saveProfileAvatar(AvatarPreset preset) => db
+      .into(db.localProfiles)
+      .insertOnConflictUpdate(
+        LocalProfilesCompanion(
+          id: const Value(1),
+          avatarPreset: Value(preset.name),
+          photo: const Value(null),
+        ),
+      );
+
+  WeighIn _weighIn(WeighInRow row) =>
+      (day: CalendarDay.parse(row.day), grams: row.grams);
+
+  Stream<List<WeighIn>> watchWeighIns({int? limit, CalendarDay? since}) {
+    final query = db.select(db.weighIns)
+      ..orderBy([(row) => OrderingTerm.desc(row.day)]);
+    if (since != null) {
+      query.where((row) => row.day.isBiggerOrEqualValue(since.iso));
+    }
+    if (limit != null) query.limit(limit);
+    return query.watch().map((rows) => rows.map(_weighIn).toList());
+  }
+
+  Future<void> saveWeighIn(
+    WeighIn value, {
+    WeighIn? original,
+    WeightUnit? displayUnit,
+  }) => db.transaction(() async {
+    if (value.day.isBefore(CalendarDay.earliest) ||
+        value.day.isAfter(CalendarDay.fromDate(now()))) {
+      throw const TrackerException('Choose today or an earlier date.');
+    }
+    if (value.grams < 1 || value.grams > maxWeightGrams) {
+      throw const TrackerException(
+        'Enter a weight above zero and at most 1,000 kg.',
+      );
+    }
+    if (original == null || original.day != value.day) {
+      final existing = await (db.select(
+        db.weighIns,
+      )..where((row) => row.day.equals(value.day.iso))).getSingleOrNull();
+      if (existing != null) {
+        throw const TrackerException(
+          'A weight is already logged for that date. Edit it in weight history.',
+        );
+      }
+    }
+    if (original != null) await deleteWeighIn(original);
+    await db
+        .into(db.weighIns)
+        .insert(
+          WeighInsCompanion.insert(day: value.day.iso, grams: value.grams),
+        );
+    if (displayUnit != null) {
+      await db
+          .into(db.localProfiles)
+          .insertOnConflictUpdate(
+            LocalProfilesCompanion(
+              id: const Value(1),
+              weightUnit: Value(displayUnit.name),
+            ),
+          );
+    }
+  });
+
+  Future<void> deleteWeighIn(WeighIn original) async {
+    final deleted =
+        await (db.delete(db.weighIns)..where(
+              (row) =>
+                  row.day.equals(original.day.iso) &
+                  row.grams.equals(original.grams),
+            ))
+            .go();
+    if (deleted == 0) {
+      throw const TrackerException(
+        'This entry changed. Reopen it from weight history.',
+      );
+    }
+  }
+
+  Future<BodyData> _bodySnapshot() async {
+    final table = db.localProfiles;
+    final row =
+        await (db.selectOnly(table)..addColumns([
+              table.displayName,
+              table.heightMillimeters,
+              table.heightUnit,
+              table.weightUnit,
+            ]))
+            .getSingleOrNull();
+    return BodyData(
+      _profileDetails(
+        name: row?.read(table.displayName),
+        height: row?.read(table.heightMillimeters),
+        heightUnit: row?.read(table.heightUnit),
+        weightUnit: row?.read(table.weightUnit),
+      ),
+      (await (db.select(
+        db.weighIns,
+      )..orderBy([(row) => OrderingTerm.asc(row.day)])).get()).map(_weighIn),
+    );
+  }
+
   Stream<List<CatalogItem>> watchCatalog() => db
       .customSelect(
         '''
@@ -105,6 +303,7 @@ class TrackerRepository {
       GROUP BY e.exercise_id
     )
     SELECT x.*, coalesce(t.set_count, 0) AS set_count,
+      EXISTS(SELECT 1 FROM goals g WHERE g.exercise_id=x.id) AS has_goal,
       (SELECT e.activity_date FROM entries e WHERE e.exercise_id=x.id
         ORDER BY e.activity_date DESC, e.entry_order DESC LIMIT 1) AS last_day,
       (SELECT s.value FROM entries e JOIN exercise_sets s ON s.entry_id=e.id
@@ -113,7 +312,7 @@ class TrackerRepository {
     FROM exercises x LEFT JOIN totals t ON t.exercise_id=x.id
     ORDER BY x.normalized_name
     ''',
-        readsFrom: {db.exercises, db.entries, db.exerciseSets},
+        readsFrom: {db.exercises, db.entries, db.exerciseSets, db.goals},
       )
       .watch()
       .map(
@@ -124,15 +323,25 @@ class TrackerRepository {
               count: r.read<int>('set_count'),
               lastDay: _optionalDay(r.readNullable<String>('last_day')),
               latest: r.readNullable<int>('latest'),
+              hasGoal: r.read<int>('has_goal') != 0,
             ),
           ),
         ),
       );
 
-  Future<Exercise> createExercise(String name, Measurement measurement) =>
-      db.transaction(() => _createExercise(name, measurement));
+  Future<Exercise> createExercise(
+    String name,
+    Measurement measurement, {
+    bool trackSets = false,
+  }) => db.transaction(
+    () => _createExercise(name, measurement, trackSets: trackSets),
+  );
 
-  Future<Exercise> _createExercise(String name, Measurement measurement) async {
+  Future<Exercise> _createExercise(
+    String name,
+    Measurement measurement, {
+    required bool trackSets,
+  }) async {
     final clean = await _checkName(name);
     final time = _timestamp;
     final id = newId();
@@ -144,6 +353,7 @@ class TrackerRepository {
             name: clean,
             normalizedName: normalizeName(clean),
             measurement: measurement.name,
+            trackSets: Value(trackSets),
             createdAt: time,
             updatedAt: time,
           ),
@@ -170,40 +380,73 @@ class TrackerRepository {
     return clean;
   }
 
-  Future<void> editExercise(String id, String name, Measurement measurement) =>
-      db.transaction(() async {
-        final existing = await _findExercise(id);
-        final clean = await _checkName(name, except: id);
-        if (existing.measurement != measurement.name) {
-          final hasEntry =
-              await (db.select(db.entries)
-                    ..where((e) => e.exerciseId.equals(id))
-                    ..limit(1))
-                  .getSingleOrNull();
-          final hasGoal = await (db.select(
-            db.goals,
-          )..where((g) => g.exerciseId.equals(id))).getSingleOrNull();
-          if (hasEntry != null || hasGoal != null) {
-            throw const TrackerException(
-              'Remove the goal and recorded history before changing the measurement.',
-            );
-          }
-        }
-        await (db.update(db.exercises)..where((x) => x.id.equals(id))).write(
-          ExercisesCompanion(
-            name: Value(clean),
-            normalizedName: Value(normalizeName(clean)),
-            measurement: Value(measurement.name),
-            updatedAt: Value(_timestampAfter(existing.updatedAt)),
-          ),
+  Future<void> editExercise(
+    String id,
+    String name,
+    Measurement measurement, {
+    bool? trackSets,
+  }) => db.transaction(() async {
+    final existing = await _findExercise(id);
+    final clean = await _checkName(name, except: id);
+    if (existing.measurement != measurement.name) {
+      final hasGoal = await (db.select(
+        db.goals,
+      )..where((g) => g.exerciseId.equals(id))).getSingleOrNull();
+      if (hasGoal != null || await _hasEntries(id)) {
+        throw const TrackerException(
+          'Remove the goal and recorded history before changing the measurement.',
         );
-      });
+      }
+    }
+    await (db.update(db.exercises)..where((x) => x.id.equals(id))).write(
+      ExercisesCompanion(
+        name: Value(clean),
+        normalizedName: Value(normalizeName(clean)),
+        measurement: Value(measurement.name),
+        trackSets: trackSets == null ? const Value.absent() : Value(trackSets),
+        updatedAt: Value(_timestampAfter(existing.updatedAt)),
+      ),
+    );
+  });
 
   Future<ExerciseRow> _findExercise(String id) async =>
       await (db.select(
         db.exercises,
       )..where((x) => x.id.equals(id))).getSingleOrNull() ??
       (throw const TrackerException('This exercise no longer exists.'));
+
+  Future<bool> _hasEntries(String id) async =>
+      await (db.select(db.entries)
+            ..where((entry) => entry.exerciseId.equals(id))
+            ..limit(1))
+          .getSingleOrNull() !=
+      null;
+
+  Future<void> deleteExercise(String id) => db.transaction(() async {
+    await (db.delete(
+      db.entries,
+    )..where((entry) => entry.exerciseId.equals(id))).go();
+    await (db.delete(
+      db.exercises,
+    )..where((exercise) => exercise.id.equals(id))).go();
+  });
+
+  Future<void> deleteAllExercises() => db.transaction(_clearExercises);
+
+  Future<void> resetAllData() => db.transaction(() async {
+    await _clearExercises();
+    await db.delete(db.weighIns).go();
+    await db.delete(db.localProfiles).go();
+    await db.delete(db.appPreferences).go();
+  });
+
+  Future<void> _clearExercises() async {
+    await db.delete(db.exerciseSets).go();
+    await db.delete(db.entries).go();
+    await db.delete(db.goals).go();
+    await db.delete(db.exercises).go();
+    await db.delete(db.importReceipts).go();
+  }
 
   Future<void> setArchived(String id, bool archived) =>
       db.transaction(() async {
@@ -217,7 +460,7 @@ class TrackerRepository {
         );
       });
 
-  void _validateDraft(EntryDraft draft) {
+  void _validateDraft(EntryDraft draft, Measurement measurement) {
     if (draft.day.isBefore(CalendarDay.earliest) ||
         draft.day.isAfter(CalendarDay.fromDate(now()))) {
       throw const TrackerException('Choose today or a past activity date.');
@@ -228,7 +471,11 @@ class TrackerRepository {
     if (draft.sets.isEmpty || draft.sets.length > maxSetsPerEntry) {
       throw const TrackerException('Each entry needs between 1 and 100 sets.');
     }
-    if (draft.sets.any((s) => setValueError(s.value) != null)) {
+    if (draft.sets.any(
+      (s) =>
+          exerciseValueError(s.value, measurement) != null ||
+          !validSetReps(s.reps, measurement),
+    )) {
       throw const TrackerException('Correct the invalid set values.');
     }
   }
@@ -252,12 +499,21 @@ class TrackerRepository {
         'An exercise is missing or archived. Check your selections.',
       );
     }
-    await _insertDrafts(drafts);
+    await _insertDrafts(drafts, {
+      for (final e in exercises) e.id: Measurement.values.byName(e.measurement),
+    });
   });
 
-  Future<void> _insertDrafts(List<EntryDraft> drafts) async {
+  Future<void> _insertDrafts(
+    List<EntryDraft> drafts,
+    Map<String, Measurement> measurements,
+  ) async {
     for (final draft in drafts) {
-      _validateDraft(draft);
+      final measurement = measurements[draft.exerciseId];
+      if (measurement == null) {
+        throw const TrackerException('This exercise no longer exists.');
+      }
+      _validateDraft(draft, measurement);
     }
     var order = await _nextOrder();
     if (order + drafts.length - 1 > maxEntryOrder) {
@@ -288,6 +544,7 @@ class TrackerRepository {
             entryId: id,
             position: i,
             value: set.value,
+            reps: Value(set.reps),
           ),
         );
       }
@@ -305,7 +562,6 @@ class TrackerRepository {
     Entry original,
     EntryDraft draft,
   ) => db.transaction(() async {
-    _validateDraft(draft);
     final existing = await (db.select(
       db.entries,
     )..where((e) => e.id.equals(original.id))).getSingleOrNull();
@@ -316,6 +572,8 @@ class TrackerRepository {
         'This entry changed. Reopen it before editing.',
       );
     }
+    final exercise = await _findExercise(existing.exerciseId);
+    _validateDraft(draft, Measurement.values.byName(exercise.measurement));
     final owned = original.sets.map((s) => s.id).toSet();
     final supplied = draft.sets.map((s) => s.id).nonNulls.toList();
     if (!owned.containsAll(supplied) ||
@@ -340,6 +598,7 @@ class TrackerRepository {
             entryId: original.id,
             position: i,
             value: set.value,
+            reps: Value(set.reps),
           ),
       ]),
     );
@@ -363,6 +622,7 @@ class TrackerRepository {
     search: search,
     limit: limit,
     offset: offset,
+    includeArchived: false,
   ).watch().map(_readEntries);
 
   Selectable<QueryRow> _entriesQuery({
@@ -371,22 +631,25 @@ class TrackerRepository {
     String search = '',
     int? limit,
     int offset = 0,
+    bool includeArchived = true,
   }) {
+    final joinsExercise = search.isNotEmpty || !includeArchived;
     final conditions = [
       if (exerciseId != null) 'e.exercise_id = ?',
       if (day != null) 'e.activity_date = ?',
       if (search.isNotEmpty) 'instr(x.normalized_name, ?) > 0',
+      if (!includeArchived) 'x.archived = 0',
     ];
     return db.customSelect(
       """
       WITH wanted AS (
         SELECT e.* FROM entries e
-        ${search.isEmpty ? '' : 'JOIN exercises x ON x.id = e.exercise_id'}
+        ${joinsExercise ? 'JOIN exercises x ON x.id = e.exercise_id' : ''}
         ${conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}'}
         ORDER BY e.activity_date DESC, e.entry_order DESC
         LIMIT ? OFFSET ?
       )
-      SELECT e.*, s.id AS set_id, s.position, s.value
+      SELECT e.*, s.id AS set_id, s.position, s.value, s.reps
       FROM wanted e JOIN exercise_sets s ON s.entry_id=e.id
       ORDER BY e.activity_date DESC, e.entry_order DESC, s.position ASC
       """,
@@ -397,11 +660,7 @@ class TrackerRepository {
         Variable(limit ?? -1),
         Variable(offset),
       ],
-      readsFrom: {
-        db.entries,
-        db.exerciseSets,
-        if (search.isNotEmpty) db.exercises,
-      },
+      readsFrom: {db.entries, db.exerciseSets, if (joinsExercise) db.exercises},
     );
   }
 
@@ -414,6 +673,7 @@ class TrackerRepository {
         id: row.read<String>('set_id'),
         position: row.read<int>('position'),
         value: row.read<int>('value'),
+        reps: row.readNullable<int>('reps'),
       ));
     }
     return List.unmodifiable(
@@ -440,16 +700,17 @@ class TrackerRepository {
   }) => db
       .customSelect(
         '''
-    SELECT DISTINCT activity_date FROM entries
+    SELECT DISTINCT activity_date FROM entries e
+    JOIN exercises x ON x.id=e.exercise_id
     WHERE activity_date BETWEEN ?1 AND ?2
-      AND (?3 IS NULL OR exercise_id = ?3)
+      AND (?3 IS NULL OR e.exercise_id = ?3) AND x.archived = 0
     ''',
         variables: [
           Variable(start.iso),
           Variable(end.iso),
           Variable<String>(exerciseId),
         ],
-        readsFrom: {db.entries},
+        readsFrom: {db.entries, db.exercises},
       )
       .watch()
       .map(
@@ -460,7 +721,7 @@ class TrackerRepository {
 
   static const _daysSql = '''
     WITH ranked AS (
-      SELECT e.exercise_id, e.activity_date, s.value,
+      SELECT e.exercise_id, e.activity_date, s.value, s.reps,
         ROW_NUMBER() OVER (
           PARTITION BY e.exercise_id, e.activity_date ORDER BY e.entry_order, s.position
         ) AS asc_rank,
@@ -474,7 +735,8 @@ class TrackerRepository {
     SELECT exercise_id, activity_date,
       MAX(CASE WHEN asc_rank=1 THEN value END) AS first_set,
       MAX(CASE WHEN desc_rank=1 THEN value END) AS latest_set,
-      MAX(value) AS best_set, SUM(value) AS volume, COUNT(*) AS set_count
+      MAX(CASE WHEN reps = 0 THEN 0 ELSE value END) AS best_set,
+      SUM(value) AS volume, COUNT(*) AS set_count
     FROM ranked GROUP BY exercise_id, activity_date
     ''';
 
@@ -509,7 +771,7 @@ class TrackerRepository {
     final rows = await db
         .customSelect(
           '''
-      $_daysSql 1),
+      $_daysSql EXISTS (SELECT 1 FROM exercises x WHERE x.id=e.exercise_id AND x.archived=0)),
       daily AS ($_dailyColumns),
       summaries AS (
         SELECT daily.*,
@@ -529,7 +791,7 @@ class TrackerRepository {
       SELECT * FROM summaries WHERE recent_rank <= 16
       ORDER BY exercise_id, activity_date
       ''',
-          readsFrom: {db.entries, db.exerciseSets},
+          readsFrom: {db.entries, db.exerciseSets, db.exercises},
         )
         .get();
     final groups = <String, List<QueryRow>>{};
@@ -561,12 +823,20 @@ class TrackerRepository {
     return (
       exercises: List<OverviewExercise>.unmodifiable(summaries),
       firstDay: first,
-      recent: _readEntries(await _entriesQuery(limit: 3).get()),
+      recent: _readEntries(
+        await _entriesQuery(limit: 3, includeArchived: false).get(),
+      ),
     );
   });
 
   Stream<OverviewData> watchOverview() => db
-      .tableUpdates(TableUpdateQuery.onAllTables([db.entries, db.exerciseSets]))
+      .tableUpdates(
+        TableUpdateQuery.onAllTables([
+          db.entries,
+          db.exerciseSets,
+          db.exercises,
+        ]),
+      )
       .startWithInitial(_overview);
 
   Stream<Goal?> watchGoal(String exerciseId) =>
@@ -604,6 +874,7 @@ class TrackerRepository {
     preferences: _preferences(
       await db.select(db.appPreferences).getSingleOrNull(),
     ),
+    body: await _bodySnapshot(),
     receipts: {
       for (final r in await db.select(db.importReceipts).get())
         r.fingerprint: DateTime.parse(r.importedAt),
@@ -623,11 +894,8 @@ class TrackerRepository {
         throw StateError('Replacement requires a recovery backup.');
       }
       await recover(current);
-      await db.delete(db.exerciseSets).go();
-      await db.delete(db.entries).go();
-      await db.delete(db.goals).go();
-      await db.delete(db.exercises).go();
-      await db.delete(db.importReceipts).go();
+      await _clearExercises();
+      if (write.data.body != null) await db.delete(db.weighIns).go();
     }
     await db.batch((b) {
       b.insertAll(
@@ -638,6 +906,7 @@ class TrackerRepository {
             name: x.name,
             normalizedName: normalizeName(x.name),
             measurement: x.measurement.name,
+            trackSets: Value(x.trackSets),
             archived: Value(x.archived),
             createdAt: x.createdAt.toIso8601String(),
             updatedAt: x.updatedAt.toIso8601String(),
@@ -666,6 +935,7 @@ class TrackerRepository {
               entryId: e.id,
               position: s.position,
               value: s.value,
+              reps: Value(s.reps),
             ),
       ]);
       b.insertAll(
@@ -688,8 +958,17 @@ class TrackerRepository {
           ),
         ),
       );
+      if (write.data.body case final body?) {
+        b.insertAll(db.weighIns, [
+          for (final record in body.weighIns)
+            WeighInsCompanion.insert(day: record.day.iso, grams: record.grams),
+        ]);
+      }
     });
     if (write.replace) await savePreferences(write.data.preferences);
+    if (write.data.body case final body?) {
+      await saveProfileDetails(body.profile);
+    }
   });
 
   Future<void> importActivity(
@@ -704,11 +983,21 @@ class TrackerRepository {
       );
     }
     final created = <String, String>{};
+    final measurements = {
+      for (final e in current.exercises) e.id: e.measurement,
+    };
+    final multipleSets = {
+      for (final e in write.entries)
+        if (e.sets.length > 1) e.exerciseId,
+    };
     for (final spec in write.create) {
-      created[spec.key] = (await _createExercise(
+      final exercise = await _createExercise(
         spec.name,
         spec.measurement,
-      )).id;
+        trackSets: multipleSets.contains(spec.key),
+      );
+      created[spec.key] = exercise.id;
+      measurements[exercise.id] = exercise.measurement;
     }
     await _insertDrafts([
       for (final draft in write.entries)
@@ -718,7 +1007,7 @@ class TrackerRepository {
           notes: draft.notes,
           sets: draft.sets,
         ),
-    ]);
+    ], measurements);
     await db
         .into(db.importReceipts)
         .insert(

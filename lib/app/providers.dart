@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/database/local_database.dart';
 import '../core/database/tracker_repository.dart';
 import '../core/platform/device_services.dart';
+import '../shared/domain/body_metrics.dart';
 import '../shared/domain/training.dart';
 
 final nowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
@@ -15,6 +16,20 @@ final feedbackProvider = Provider<FeedbackService>(
 final filesProvider = Provider<TransferFiles>(
   (ref) => const DeviceTransferFiles(),
 );
+final appBuildProvider = FutureProvider<AppBuild>(
+  (ref) => installedAppBuild(),
+  retry: (_, _) => null,
+);
+final profilePhotosProvider = Provider<ProfilePhotos>(
+  (ref) => DeviceProfilePhotos(),
+);
+final recoverProfilePhotoProvider = FutureProvider<void>((ref) async {
+  final photos = ref.watch(profilePhotosProvider);
+  final repo = ref.watch(repositoryProvider);
+  if (await photos.recover() case final photo?) {
+    await repo.saveProfilePhoto(photo);
+  }
+}, retry: (_, _) => null);
 
 final repositoryProvider = Provider<TrackerRepository>((ref) {
   final repo = TrackerRepository(
@@ -33,6 +48,18 @@ final bootstrapProvider = FutureProvider<void>(
 final preferencesProvider = StreamProvider<Preferences>(
   (ref) => ref.watch(repositoryProvider).watchPreferences(),
 );
+final progressExerciseProvider = StreamProvider.autoDispose<String?>(
+  (ref) => ref.watch(repositoryProvider).watchProgressExercise(),
+);
+final profileProvider = StreamProvider.autoDispose<LocalProfile>(
+  (ref) => ref.watch(repositoryProvider).watchProfile(),
+);
+final weighInsProvider = StreamProvider.autoDispose
+    .family<List<WeighIn>, ({int? limit, CalendarDay? since})>(
+      (ref, filter) => ref
+          .watch(repositoryProvider)
+          .watchWeighIns(limit: filter.limit, since: filter.since),
+    );
 final catalogProvider = StreamProvider<List<CatalogItem>>(
   (ref) => ref.watch(repositoryProvider).watchCatalog(),
 );
@@ -155,6 +182,10 @@ class TrainingActions {
 
   void select() {
     if (hapticsEnabled()) unawaited(_feedback(feedback.selection));
+  }
+
+  void saved() {
+    if (hapticsEnabled()) unawaited(_feedback(feedback.saved));
   }
 
   Future<void> _feedback(Future<void> Function() send) async {

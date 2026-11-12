@@ -34,13 +34,13 @@ final class NativeTransferSmoke: XCTestCase {
         app.launch()
         XCTAssertTrue(element("Overview", in: app).waitForExistence(timeout: 10))
 
-        tap("Settings", in: app)
-        XCTAssertTrue(element("Export backup", in: app).waitForExistence(timeout: 5))
+        tap("Profile", in: app)
+        XCTAssertTrue(element("Edit profile", in: app).waitForExistence(timeout: 5))
         let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.42))
         let destination = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.42))
         edge.press(forDuration: 0.05, thenDragTo: destination)
         XCTAssertTrue(element("Overview", in: app).waitForExistence(timeout: 5))
-        XCTAssertFalse(element("Export backup", in: app).exists)
+        XCTAssertFalse(element("Edit profile", in: app).exists)
 
         tap("Add entry", in: app)
         let heading = element("Choose exercise", in: app)
@@ -69,7 +69,8 @@ final class NativeTransferSmoke: XCTestCase {
         XCTAssertTrue(element("Overview", in: app).waitForExistence(timeout: 10))
         capture("Overview after cold launch")
 
-        tap("Settings", in: app)
+        tap("Profile", in: app)
+        tap("Your data", in: app)
         tap("Export backup", in: app)
         let shareAction = app.descendants(matching: .any).matching(
             NSPredicate(format: "label ==[c] %@", "Save to Files")
@@ -103,5 +104,46 @@ final class NativeTransferSmoke: XCTestCase {
         app.activate()
         XCTAssertTrue(element("Open JSON file", in: app).waitForExistence(timeout: 8),
                       "The app lost the current screen when it resumed")
+    }
+
+    func testNativeProfilePhotoPickerAndVersion() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(element("Overview", in: app).waitForExistence(timeout: 10))
+        tap("Profile", in: app)
+        capture("Profile")
+
+        tap("Edit profile", in: app)
+        let photoAction = "Change avatar"
+        let photoButton = app.buttons.matching(NSPredicate(format: "label == %@", photoAction)).firstMatch
+        XCTAssertTrue(photoButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(photoButton.frame.midX, app.frame.midX, accuracy: 4)
+        capture("Edit profile with centered photo action")
+        tap(photoAction, in: app)
+        XCTAssertTrue(element("Choose an avatar", in: app).waitForExistence(timeout: 5))
+        capture("Fitness avatar choices")
+        tap("Choose from gallery", in: app)
+        let picker = app.navigationBars.firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 16), "The native photo picker did not open")
+        let nativeCancel = picker.buttons.firstMatch
+        XCTAssertTrue(nativeCancel.waitForExistence(timeout: 8))
+        capture("Native profile photo picker")
+        nativeCancel.tap()
+        let resumed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true AND enabled == true"),
+            object: photoButton
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 8), .completed)
+        tap("Cancel", in: app)
+
+        let version = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Version ")
+        ).firstMatch
+        for _ in 0..<3 where !version.exists || !version.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(version.exists)
+        XCTAssertTrue(version.label.contains("("), "Expected the installed build number in \(version.label)")
+        capture("Installed version footer")
     }
 }

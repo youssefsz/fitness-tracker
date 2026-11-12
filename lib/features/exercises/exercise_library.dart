@@ -14,18 +14,23 @@ import '../../shared/widgets/ui.dart';
 Future<Exercise?> openExerciseEditor(
   BuildContext context, {
   CatalogItem? item,
-  bool hasGoal = false,
 }) => Navigator.of(context).push<Exercise>(
   item == null
       ? DraftSheetRoute<Exercise>(
           context: context,
           builder: (_) => const ExerciseEditor(),
         )
-      : platformPageRoute<Exercise>(
-          context,
-          (_) => ExerciseEditor(item: item, hasGoal: hasGoal),
-        ),
+      : platformPageRoute<Exercise>(context, (_) => ExerciseEditor(item: item)),
 );
+
+Future<bool> confirmExerciseDeletion(BuildContext context, Exercise exercise) =>
+    confirmAction(
+      context,
+      title: 'Delete ${exercise.name}?',
+      message: 'This permanently deletes this exercise, its workout history, and its goal.',
+      label: 'Delete exercise',
+      destructive: true,
+    );
 
 class ExerciseLibrary extends ConsumerStatefulWidget {
   const ExerciseLibrary({super.key});
@@ -34,41 +39,46 @@ class ExerciseLibrary extends ConsumerStatefulWidget {
   ConsumerState<ExerciseLibrary> createState() => _ExerciseLibraryState();
 }
 
+enum _ExerciseAction { archive, restore, delete }
+
 class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
   var _search = '';
   final _busy = <String>{};
 
-  Future<void> _edit(CatalogItem item) async {
-    try {
-      final goal = await ref.read(goalProvider(item.exercise.id).future);
-      if (!mounted) return;
-      await openExerciseEditor(context, item: item, hasGoal: goal != null);
-    } catch (error) {
-      if (mounted) announce(context, describeError(error));
-    }
-  }
-
-  Future<void> _archive(Exercise exercise) async {
+  Future<void> _manage(Exercise exercise, _ExerciseAction action) async {
     if (_busy.contains(exercise.id)) return;
     setState(() => _busy.add(exercise.id));
     try {
-      if (!exercise.archived) {
+      final deleting = action == _ExerciseAction.delete;
+      if (deleting) {
+        if (!await confirmExerciseDeletion(context, exercise) || !mounted) {
+          return;
+        }
+      } else if (action == _ExerciseAction.archive) {
         final confirmed = await confirmAction(
           context,
           title: 'Archive ${exercise.name}?',
-          message: 'It will disappear from logging suggestions. Your records and goal stay available.',
+          message:
+              'This hides the exercise and its history until you restore it.',
           label: 'Archive',
         );
         if (!mounted || !confirmed) return;
       }
-      await ref
-          .read(repositoryProvider)
-          .setArchived(exercise.id, !exercise.archived);
-      if (mounted) {
-        announce(
-          context,
-          exercise.archived ? 'Exercise restored.' : 'Exercise archived.',
+      final repository = ref.read(repositoryProvider);
+      if (deleting) {
+        await repository.deleteExercise(exercise.id);
+      } else {
+        await repository.setArchived(
+          exercise.id,
+          action == _ExerciseAction.archive,
         );
+      }
+      if (mounted) {
+        announce(context, switch (action) {
+          _ExerciseAction.archive => 'Exercise archived.',
+          _ExerciseAction.restore => 'Exercise restored.',
+          _ExerciseAction.delete => 'Exercise deleted.',
+        });
       }
     } catch (error) {
       if (mounted) announce(context, describeError(error));
@@ -88,7 +98,7 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
                 title: x.name,
                 leading: ExerciseIcon(x.name),
                 subtitle:
-                    '${x.measurement.label} · ${item.count == 0 ? 'No entries' : '${item.count} ${item.count == 1 ? 'set' : 'sets'}'}',
+                    '${x.measurement.label} · ${item.count == 0 ? 'No entries' : '${item.count} ${item.count == 1 ? 'result' : 'results'}'}',
                 onTap: () => context.push('/exercise/${x.id}'),
                 separator: false,
               ),
@@ -96,23 +106,37 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
             if (x.archived)
               QuietButton(
                 'Restore',
-                _busy.contains(x.id) ? null : () => _archive(x),
+                _busy.contains(x.id)
+                    ? null
+                    : () => _manage(x, _ExerciseAction.restore),
               )
-            else ...[
+            else
               QuietButton(
                 'Edit',
-                _busy.contains(x.id) ? null : () => _edit(item),
+                _busy.contains(x.id)
+                    ? null
+                    : () => openExerciseEditor(context, item: item),
               ),
-              PopupMenuButton<String>(
-                tooltip: 'Manage ${x.name}',
-                enabled: !_busy.contains(x.id),
-                icon: const Icon(LucideIcons.ellipsis, size: 20),
-                onSelected: (_) => _archive(x),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'archive', child: Text('Archive')),
-                ],
-              ),
-            ],
+            PopupMenuButton<_ExerciseAction>(
+              tooltip: 'Manage ${x.name}',
+              enabled: !_busy.contains(x.id),
+              icon: const Icon(LucideIcons.ellipsis, size: 20),
+              onSelected: (action) => _manage(x, action),
+              itemBuilder: (context) => [
+                if (!x.archived)
+                  const PopupMenuItem(
+                    value: _ExerciseAction.archive,
+                    child: Text('Archive'),
+                  ),
+                PopupMenuItem(
+                  value: _ExerciseAction.delete,
+                  child: Text(
+                    'Delete exercise',
+                    style: TextStyle(color: context.colors.danger),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         const Divider(),
@@ -159,7 +183,7 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
                         ? 'Build your exercise list'
                         : 'No matching exercises',
                     message: items.isEmpty
-                        ? 'Create an exercise to start tracking its sets.'
+                        ? 'Create an exercise to start tracking results.'
                         : 'Try another exercise name.',
                   ),
                 for (final item in matches.where((i) => !i.exercise.archived))
@@ -172,7 +196,7 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
                     _row(item),
                   const SizedBox(height: 12),
                   Text(
-                    'Archived exercises keep their recorded history.',
+                    'Restore an exercise to see its history again.',
                     style: context.type.bodySmall,
                   ),
                 ],
@@ -193,7 +217,7 @@ typedef ExerciseEditorLayout = Widget Function({
 });
 
 class ExerciseEditor extends ConsumerStatefulWidget {
-  const ExerciseEditor({this.item, this.hasGoal = false, super.key})
+  const ExerciseEditor({this.item, super.key})
     : onCreated = null,
       layout = null;
 
@@ -201,11 +225,9 @@ class ExerciseEditor extends ConsumerStatefulWidget {
     required this.onCreated,
     required this.layout,
     super.key,
-  }) : item = null,
-       hasGoal = false;
+  }) : item = null;
 
   final CatalogItem? item;
-  final bool hasGoal;
   final ValueChanged<Exercise>? onCreated;
   final ExerciseEditorLayout? layout;
 
@@ -217,12 +239,14 @@ class _ExerciseEditorState extends ConsumerState<ExerciseEditor> {
   Exercise? get _original => widget.item?.exercise;
   late final _name = TextEditingController(text: _original?.name);
   late var _measurement = _original?.measurement ?? Measurement.repetitions;
+  late var _trackSets = _original?.trackSets ?? false;
   bool _busy = false, _confirming = false;
   String? _error;
 
   bool get _dirty =>
       _name.text.trim() != (_original?.name ?? '') ||
-      _measurement != (_original?.measurement ?? Measurement.repetitions);
+      _measurement != (_original?.measurement ?? Measurement.repetitions) ||
+      _trackSets != (_original?.trackSets ?? false);
 
   @override
   void dispose() {
@@ -244,13 +268,22 @@ class _ExerciseEditorState extends ConsumerState<ExerciseEditor> {
     try {
       final repo = ref.read(repositoryProvider);
       if (_original case final x?) {
-        await repo.editExercise(x.id, name, _measurement);
+        await repo.editExercise(
+          x.id,
+          name,
+          _measurement,
+          trackSets: _trackSets,
+        );
         if (mounted) {
           announce(context, 'Exercise updated.');
           Navigator.pop(context);
         }
       } else {
-        final exercise = await repo.createExercise(name, _measurement);
+        final exercise = await repo.createExercise(
+          name,
+          _measurement,
+          trackSets: _trackSets,
+        );
         if (!mounted) return;
         if (widget.onCreated case final onCreated?) {
           onCreated(exercise);
@@ -298,7 +331,8 @@ class _ExerciseEditorState extends ConsumerState<ExerciseEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final locked = (widget.item?.count ?? 0) > 0 || widget.hasGoal;
+    final item = widget.item;
+    final locked = item != null && (item.count > 0 || item.hasGoal);
     final title = _original == null ? 'New exercise' : 'Edit exercise';
     final footer = ActionFooter(
       label: _original == null ? 'Create exercise' : 'Save exercise',
@@ -306,18 +340,28 @@ class _ExerciseEditorState extends ConsumerState<ExerciseEditor> {
       onPressed: _save,
     );
     final children = <Widget>[
-      const SizedBox(height: 10),
-      const SectionTitle('Exercise name'),
-      const SizedBox(height: 10),
+      const SizedBox(height: Space.md),
       TextField(
         controller: _name,
         enabled: !_busy,
         textCapitalization: TextCapitalization.sentences,
         textInputAction: TextInputAction.done,
-        decoration: lineInput(context, label: 'Name', error: _error),
+        style: context.type.headlineSmall,
+        decoration: lineInput(context, label: 'Exercise name', error: _error)
+            .copyWith(
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              floatingLabelStyle: context.type.titleMedium?.copyWith(
+                color: context.colors.muted,
+              ),
+              hintText: 'e.g. Push-ups',
+              hintStyle: context.type.titleLarge?.copyWith(
+                color: context.colors.muted,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
         onChanged: (_) => setState(() => _error = null),
       ),
-      const SizedBox(height: 26),
+      const SizedBox(height: Space.lg),
       const SectionTitle('Measure in'),
       const SizedBox(height: 6),
       RadioGroup<Measurement>(
@@ -336,39 +380,26 @@ class _ExerciseEditorState extends ConsumerState<ExerciseEditor> {
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.trailing,
                 title: Text(m.label),
-                subtitle: Text(
-                  m == Measurement.repetitions
-                      ? 'Count each rep'
-                      : 'Minutes and seconds',
-                ),
               ),
               const Divider(),
             ],
           ],
         ),
       ),
-      const SizedBox(height: Space.md),
-      Text(
-        locked
-            ? 'Measurement is locked while this exercise has recorded sets or a goal.'
-            : 'Choose the measurement you want to track.',
-        style: context.type.bodySmall,
-      ),
-      if (!locked) ...[
+      if (locked) ...[
         const SizedBox(height: Space.md),
-        Wrap(
-          spacing: Space.md,
-          children: [
-            Text('Example entry', style: context.type.bodySmall),
-            Text(
-              _measurement == Measurement.repetitions
-                  ? '12 reps'
-                  : '1 min 30 sec',
-              style: context.type.labelMedium,
-            ),
-          ],
+        Text(
+          'Measurement is locked while this exercise has recorded activity or a goal.',
+          style: context.type.bodySmall,
         ),
       ],
+      const SizedBox(height: Space.sm),
+      SwitchRow(
+        title: 'Track sets',
+        subtitle: 'Log multiple sets in one activity.',
+        value: _trackSets,
+        onChanged: _busy ? null : (value) => setState(() => _trackSets = value),
+      ),
     ];
     if (widget.layout case final layout?) {
       return layout(

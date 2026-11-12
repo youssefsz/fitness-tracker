@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import 'transfer_codec.dart';
 
@@ -19,8 +20,17 @@ class BackupPlan {
   final List<String> conflicts;
 }
 
-String _activitySignature(String id, CalendarDay day, Iterable<int> values) =>
-    jsonEncode([id, day.iso, values.toList()]);
+String _activitySignature(
+  String id,
+  CalendarDay day,
+  Iterable<({int value, int? reps})> values,
+) => jsonEncode([
+  id,
+  day.iso,
+  [
+    for (final set in values) [set.value, set.reps],
+  ],
+]);
 
 BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
   if (mode == RestoreMode.replace) {
@@ -39,7 +49,7 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
       _activitySignature(
         normalizeName(byId[e.exerciseId]!.name),
         e.day,
-        e.sets.map((s) => s.value),
+        e.sets.map((s) => (value: s.value, reps: s.reps)),
       ),
   };
   final sourceById = {for (final x in source.exercises) x.id: x};
@@ -97,7 +107,7 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
       _activitySignature(
         normalizeName(sourceById[e.exerciseId]!.name),
         e.day,
-        e.sets.map((s) => s.value),
+        e.sets.map((s) => (value: s.value, reps: s.reps)),
       ),
     )) {
       possible++;
@@ -144,6 +154,48 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
       receipts[receipt.key] = receipt.value;
     }
   }
+  BodyData? body;
+  if (source.body case final incoming?) {
+    final local = current.body?.profile ?? defaultProfileDetails;
+    final imported = incoming.profile;
+    if (local.displayName != null &&
+        imported.displayName != null &&
+        local.displayName != imported.displayName) {
+      conflicts.add('Keep the profile name on this device.');
+    }
+    if (local.heightMillimeters != null &&
+        imported.heightMillimeters != null &&
+        local.heightMillimeters != imported.heightMillimeters) {
+      conflicts.add('Keep the height on this device.');
+    }
+    final byDay = {
+      for (final record in current.body?.weighIns ?? <WeighIn>[])
+        record.day: record.grams,
+    };
+    final added = <WeighIn>[];
+    for (final record in incoming.weighIns) {
+      final existing = byDay[record.day];
+      if (existing == null) {
+        added.add(record);
+      } else if (existing == record.grams) {
+        duplicates++;
+      } else {
+        conflicts.add(
+          'Keep the weigh-in on this device for ${record.day.iso}.',
+        );
+      }
+    }
+    body = BodyData((
+      displayName: local.displayName ?? imported.displayName,
+      heightMillimeters: local.heightMillimeters ?? imported.heightMillimeters,
+      heightUnit: local == defaultProfileDetails
+          ? imported.heightUnit
+          : local.heightUnit,
+      weightUnit: local == defaultProfileDetails
+          ? imported.weightUnit
+          : local.weightUnit,
+    ), added);
+  }
   return BackupPlan(
     (
       replace: false,
@@ -153,6 +205,7 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
         goals: goals,
         preferences: current.preferences,
         receipts: receipts,
+        body: body,
       ),
     ),
     duplicates,
@@ -246,13 +299,23 @@ ActivityPlan planActivity(
   }
   final existing = {
     for (final e in current.entries)
-      _activitySignature(e.exerciseId, e.day, e.sets.map((s) => s.value)),
+      _activitySignature(
+        e.exerciseId,
+        e.day,
+        e.sets.map((s) => (value: s.value, reps: s.reps)),
+      ),
   };
   var overlaps = 0;
   final entries = <EntryDraft>[];
   for (final record in batch.records) {
     final id = targets[record.key]!;
-    if (existing.contains(_activitySignature(id, record.day, record.sets))) {
+    if (existing.contains(
+      _activitySignature(
+        id,
+        record.day,
+        record.sets.map((s) => (value: s.value, reps: s.reps)),
+      ),
+    )) {
       overlaps++;
     }
     entries.add(
@@ -260,7 +323,7 @@ ActivityPlan planActivity(
         exerciseId: id,
         day: record.day,
         notes: record.notes,
-        sets: record.sets.map((v) => (id: null, value: v)),
+        sets: record.sets,
       ),
     );
   }

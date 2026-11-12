@@ -2,7 +2,7 @@
 
 This guide describes the app's visual language and interaction rules. Use the palette, typography, and component behavior to keep new screens coherent. Layouts can evolve with the product.
 
-The product records results whenever someone exercises. It supports repetitions, duration, historical entries, multiple sets, and optional personal goals. It does not prescribe routines, schedules, or streaks.
+The product records exercise results as reps, duration, weight, or weight and reps. It supports historical entries, optional sets, and personal goals.
 
 ## Design principles
 
@@ -87,11 +87,11 @@ Only exercises with recorded results appear as tracked exercises on Overview. Cr
 
 ### Logging and forms
 
-Use an open table for repeated sets. Each row has a set number, an editable value, and a remove action. Use a numeric keyboard for repetition counts and separate minute/second fields for duration. Label the units visibly.
+Give the current result a large, centered number. Use separate fields for minutes and seconds, and show reps beside the load for weighted exercises that track both. When the exercise tracks sets, show the set being edited and list the other sets in compact rows that reopen them for editing. Label the units visibly.
 
 Start with today, but make changing to a past date straightforward. Allow multiple sets and multiple exercises before saving. Keep Add set and Add another exercise distinct. Notes are optional. Show the save action above the keyboard when it is open.
 
-Present invalid values next to the affected field with a correction, such as “Enter seconds from 0 to 59.” Preserve valid input after an error. Use positive whole repetitions and a positive total duration. Do not prefill fabricated results.
+Present invalid values next to the affected field with a correction, such as “Enter seconds from 0 to 59.” Preserve valid input after an error. Accept explicit zeros and reject negatives. A blank field does not log a result.
 
 ### Buttons and destructive actions
 

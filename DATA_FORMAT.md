@@ -1,6 +1,6 @@
 # Data formats
 
-V accepts UTF-8 JSON up to 20 MiB. Version 1 allows at most 3,000 exercises, 20,000 entries, 100,000 sets, and 20,000 import receipts. Each entry has 1 to 100 sets. Set values and goal targets are whole numbers from 1 to 999,999. A repetition value counts reps. A duration value counts seconds.
+The app accepts UTF-8 JSON up to 20 MiB. Backups allow at most 3,000 exercises, 20,000 entries, 100,000 sets, and 20,000 import receipts. Backups with profile data allow up to 100,000 weigh-ins. Each entry has 1 to 100 results. Activity values range from 0 to 999,999. Goal targets range from 1 to 999,999. JSON uses whole reps, seconds, or grams according to the exercise measurement.
 
 An activity date is a valid `YYYY-MM-DD` calendar date from 1900 onward. Activity cannot be in the future. A goal deadline can be in the future. Audit timestamps use ISO 8601 with the UTC suffix `Z`. Names are trimmed and limited to 80 characters. Name matching ignores case and runs of whitespace. Notes can be null or at most 2,000 characters.
 
@@ -13,7 +13,7 @@ Use `fitness-backup` for a restorable snapshot. IDs are opaque strings up to 80 
 ```json
 {
 	"format": "fitness-backup",
-	"schemaVersion": 1,
+	"schemaVersion": 2,
 	"exportedAt": "2026-11-12T10:00:00.000Z",
 	"exercises": [
 		{
@@ -42,15 +42,23 @@ Use `fitness-backup` for a restorable snapshot. IDs are opaque strings up to 80 
 		}
 	],
 	"settings": {"appearance": "system", "duration": "clock", "haptics": true},
-	"importReceipts": []
+	"importReceipts": [],
+	"profile": {"displayName": "Sam", "heightMillimeters": 1785, "weightUnit": "kg"},
+	"weighIns": [{"date": "2026-11-12", "grams": 80125}]
 }
 ```
 
 Settings accept `system`, `light`, or `dark` for appearance, and `clock` or `seconds` for duration display. A receipt item contains `fingerprint` as 64 lowercase hex characters and `importedAt` as a UTC timestamp.
 
+The app writes backup version 4 when an exercise tracks weight, has set tracking turned off, or has a zero result. `trackSets` is optional and defaults to `true` for older exercises. A `weight` or `weightAndReps` set stores grams in `value`. A `weightAndReps` set also requires `reps`. Weight goals use grams as their target.
+
+The profile name and height may be null. Names use one line and up to 60 characters. Height is a whole number from 1 to 3,000 millimeters. Version 2 uses centimeters for display. Version 3 adds `heightUnit` with `cm` or `ftIn`. Version 4 also accepts it and defaults to `cm`. The body weight display unit is `kg` or `lb`. Weigh-ins use past or present calendar dates and whole numbers from 1 to 1,000,000 grams. Each date appears at most once. The profile photo stays on its original device.
+
 **Merge** keeps device preferences and skips records with identical IDs and content. For conflicting IDs, the preview states what the local copy keeps and which incoming records are skipped. If a name matches under a different exercise ID, V keeps the local exercise and skips incoming entries and goals tied to the conflicting ID. Entries with different IDs and matching date and set values are flagged and kept when you confirm. New entries take local order numbers after existing entries, in the same relative order as in the backup. Merge comparisons ignore this local renumbering.
 
-**Replace** restores the data and preferences together. It writes a private recovery backup first. If that write fails, V keeps the current database. Open the previous copy under **Settings → Your data → Recovery backups**. The recovery file stays on this device.
+For profile data, merge fills missing details and adds weigh-ins on new dates. The preview identifies any conflicting profile values or weigh-ins and keeps the device's existing values.
+
+**Replace** restores the data and preferences together. Backups without profile data preserve the current profile and weigh-ins. The app writes a private recovery backup first. If that write fails, it keeps the current database. Open the previous copy under **Profile → Your data → Recovery backups**. The recovery file stays on this device.
 
 ## Activity import
 
@@ -59,7 +67,7 @@ Settings accept `system`, `light`, or `dark` for appearance, and `clock` or `sec
 ```json
 {
 	"format": "fitness-activity-import",
-	"schemaVersion": 1,
+	"schemaVersion": 2,
 	"records": [
 		{
 			"date": "2026-11-12",
@@ -72,10 +80,24 @@ Settings accept `system`, `light`, or `dark` for appearance, and `clock` or `sec
 			"exercise": {"name": "Plank", "measurement": "duration"},
 			"sets": [100, 90],
 			"notes": null
+		},
+		{
+			"date": "2026-11-12",
+			"exercise": {"name": "Pull-ups", "measurement": "repetitions"},
+			"sets": [0],
+			"notes": "Could not complete a rep."
+		},
+		{
+			"date": "2026-11-12",
+			"exercise": {"name": "Bench press", "measurement": "weightAndReps"},
+			"sets": [{"grams": 60000, "reps": 8}],
+			"notes": null
 		}
 	]
 }
 ```
+
+Version 1 files still import reps and duration. Version 2 adds `weight` with `{ "grams": 60000 }` and `weightAndReps` with `{ "grams": 60000, "reps": 8 }`. Use zero only for an explicitly recorded result. Negative values are invalid.
 
 The preview suggests a matching active exercise or labels a new exercise to create. A name match with a different measurement or an archived exercise requires a choice. Explicitly mapping to an archived exercise adds records without restoring it.
 
@@ -83,4 +105,4 @@ The fingerprint ignores JSON formatting, object key order, and differences that 
 
 ## CSV export
 
-CSV is for analysis. It contains one row per set, with its date, exercise, measurement, unit, IDs, set number, value, notes, and UTC timestamps. Timed values remain in seconds regardless of display preferences. V quotes text and prefixes formula-like exercise names and notes with an apostrophe. Use the JSON backup to restore a database.
+CSV is for analysis. It contains one row per result, with its date, exercise, measurement, unit, IDs, set number, value, notes, and UTC timestamps. Durations use seconds and loads use kilograms. When an exercise tracks weight and reps, the CSV includes a separate `reps` column. V quotes text and prefixes formula-like exercise names and notes with an apostrophe. Use the JSON backup to restore a database.

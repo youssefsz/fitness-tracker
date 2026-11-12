@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'body_metrics.dart';
+
 const maxSetValue = 999999;
 const maxEntryOrder = 9007199254740991;
 const maxSetsPerEntry = 100;
@@ -86,11 +88,15 @@ enum RangePreset {
 
 enum Measurement {
   repetitions('Repetitions', 'reps'),
-  duration('Duration', 'seconds');
+  duration('Duration', 'seconds'),
+  weight('Weight', 'kg'),
+  weightAndReps('Weight + reps', 'kg');
 
   const Measurement(this.label, this.unit);
   final String label;
   final String unit;
+  bool get usesWeight => this == weight || this == weightAndReps;
+  bool get needsReps => this == weightAndReps;
 }
 
 enum DurationStyle { clock, seconds }
@@ -112,17 +118,37 @@ const defaultPreferences = (
 String clockValue(int seconds) =>
     '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
-String measureValue(int value, Measurement measurement, DurationStyle style) =>
-    measurement == Measurement.duration && style == DurationStyle.clock
-    ? clockValue(value)
-    : '$value';
+String measureValue(int value, Measurement measurement, DurationStyle style) {
+  if (measurement.usesWeight) {
+    return (value / 1000)
+        .toStringAsFixed(3)
+        .replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+  return measurement == Measurement.duration && style == DurationStyle.clock
+      ? clockValue(value)
+      : '$value';
+}
+
+int? parseExerciseValue(String text, Measurement measurement) {
+  final input = text.trim();
+  if (!measurement.usesWeight) return int.tryParse(input, radix: 10);
+  final kg = input.replaceAll(',', '.');
+  if (!RegExp(r'^(?:\d+(?:\.\d{0,3})?|\.\d{1,3})$').hasMatch(kg)) return null;
+  final grams = (double.tryParse(kg) ?? 0) * 1000;
+  return grams.isFinite ? grams.round() : null;
+}
 
 String measure(
   int value,
   Measurement measurement,
   DurationStyle style, {
   bool accessible = false,
+  int? reps,
 }) {
+  if (measurement.usesWeight) {
+    final load = '${measureValue(value, measurement, style)} kg';
+    return reps == null ? load : '$load × $reps ${reps == 1 ? 'rep' : 'reps'}';
+  }
   if (measurement == Measurement.repetitions) {
     return '$value ${value == 1 ? 'rep' : 'reps'}';
   }
@@ -156,6 +182,13 @@ String? setValueError(int? value) =>
     ? 'Enter a whole number from 1 to $maxSetValue.'
     : null;
 
+String? exerciseValueError(int? value, Measurement measurement) =>
+    value != null && value >= 0 && value <= maxSetValue
+    ? null
+    : measurement.usesWeight
+    ? 'Enter 0 to 999.999 kg, with up to three decimal places.'
+    : 'Enter a whole number from 0 to $maxSetValue.';
+
 class TrackerException implements Exception {
   const TrackerException(this.message);
   final String message;
@@ -168,6 +201,7 @@ class Exercise {
     required this.id,
     required this.name,
     required this.measurement,
+    this.trackSets = true,
     required this.archived,
     required this.createdAt,
     required this.updatedAt,
@@ -175,12 +209,13 @@ class Exercise {
   final String id;
   final String name;
   final Measurement measurement;
+  final bool trackSets;
   final bool archived;
   final DateTime createdAt;
   final DateTime updatedAt;
 }
 
-typedef RecordedSet = ({String id, int position, int value});
+typedef RecordedSet = ({String id, int position, int value, int? reps});
 
 class Entry {
   Entry({
@@ -203,10 +238,15 @@ class Entry {
   final List<RecordedSet> sets;
   int get total => sets.fold(0, (sum, set) => sum + set.value);
   int get latest => sets.last.value;
-  int get best => sets.map((set) => set.value).reduce(math.max);
+  int get best =>
+      sets.map((set) => set.reps == 0 ? 0 : set.value).reduce(math.max);
 }
 
-typedef DraftSet = ({String? id, int value});
+typedef DraftSet = ({String? id, int value, int? reps});
+
+bool validSetReps(int? reps, Measurement measurement) => measurement.needsReps
+    ? exerciseValueError(reps, Measurement.repetitions) == null
+    : reps == null;
 
 class EntryDraft {
   EntryDraft({
@@ -289,6 +329,16 @@ class Performance {
       change == null || first == 0 ? null : change! / first! * 100;
 }
 
+typedef WeighIn = ({CalendarDay day, int grams});
+
+class BodyData {
+  BodyData(this.profile, Iterable<WeighIn> weighIns)
+    : weighIns = List.unmodifiable(weighIns);
+
+  final ProfileDetails profile;
+  final List<WeighIn> weighIns;
+}
+
 class BackupData {
   BackupData({
     required Iterable<Exercise> exercises,
@@ -296,6 +346,7 @@ class BackupData {
     required Iterable<Goal> goals,
     required this.preferences,
     required Map<String, DateTime> receipts,
+    this.body,
   }) : exercises = List.unmodifiable(exercises),
        entries = List.unmodifiable(entries),
        goals = List.unmodifiable(goals),
@@ -305,6 +356,8 @@ class BackupData {
   final List<Goal> goals;
   final Preferences preferences;
   final Map<String, DateTime> receipts;
+  // Version 1 backups omit this data entirely.
+  final BodyData? body;
 }
 
 typedef BackupWrite = ({BackupData data, bool replace});

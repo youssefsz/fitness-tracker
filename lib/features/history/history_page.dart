@@ -73,6 +73,20 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final today = ref.watch(todayProvider);
+    ref.listen(catalogProvider, (_, next) {
+      final id = _exercise;
+      final catalog = next.asData?.value;
+      if (id != null &&
+          catalog != null &&
+          !catalog.any(
+            (item) => item.exercise.id == id && !item.exercise.archived,
+          )) {
+        setState(() {
+          _exercise = null;
+          _page = 0;
+        });
+      }
+    });
     final filters = (
       start: CalendarDay.fromDate(_month),
       end: CalendarDay.fromDate(DateTime(_month.year, _month.month + 1, 0)),
@@ -124,8 +138,9 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           ref.watch(catalogProvider),
           retry: () => ref.invalidate(catalogProvider),
           builder: (catalog) {
+            final active = catalog.where((item) => !item.exercise.archived);
             final byId = {
-              for (final item in catalog) item.exercise.id: item.exercise,
+              for (final item in active) item.exercise.id: item.exercise,
             };
             final selectedExercise = byId[_exercise];
             return Column(
@@ -139,13 +154,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                       'Filter by exercise',
                       [
                         (value: '', label: 'All exercises', subtitle: null),
-                        for (final item in catalog)
+                        for (final item in active)
                           (
                             value: item.exercise.id,
                             label: item.exercise.name,
-                            subtitle: item.exercise.archived
-                                ? 'Archived'
-                                : item.exercise.measurement.label,
+                            subtitle: item.exercise.measurement.label,
                           ),
                       ],
                       selected: _exercise ?? '',
@@ -212,9 +225,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                             context,
                             request: LogRequest(
                               day: _allActivity ? today : _selected,
-                              exercise: byId[_exercise]?.archived == false
-                                  ? byId[_exercise]
-                                  : null,
+                              exercise: selectedExercise,
                             ),
                           ),
                           icon: LucideIcons.plus,

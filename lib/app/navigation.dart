@@ -5,13 +5,17 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../features/data_transfer/transfer_page.dart';
+import '../features/data_transfer/your_data_page.dart';
 import '../features/exercises/exercise_detail.dart';
 import '../features/exercises/exercise_library.dart';
 import '../features/history/history_page.dart';
 import '../features/logging/log_page.dart';
 import '../features/overview/overview_page.dart';
+import '../features/profile/edit_profile_page.dart';
+import '../features/profile/profile_page.dart';
+import '../features/profile/weight_page.dart';
 import '../features/progress/progress_page.dart';
-import '../features/settings/settings_page.dart';
+import '../shared/domain/training.dart';
 import '../shared/widgets/ui.dart';
 import 'providers.dart';
 import 'theme.dart';
@@ -58,10 +62,36 @@ GoRouter createRouter() => GoRouter(
       ],
     ),
     GoRoute(
-      path: '/settings',
+      path: '/profile',
       pageBuilder: (context, state) =>
-          _platformPage(context, state, const SettingsPage()),
+          _platformPage(context, state, const ProfilePage()),
+      routes: [
+        GoRoute(
+          path: 'edit',
+          pageBuilder: (context, state) =>
+              _platformPage(context, state, const EditProfilePage()),
+        ),
+        GoRoute(
+          path: 'weight',
+          pageBuilder: (context, state) =>
+              _platformPage(context, state, const WeightHistoryPage()),
+        ),
+        GoRoute(
+          path: 'weigh-in',
+          pageBuilder: (context, state) => _platformPage(
+            context,
+            state,
+            WeightFormPage(original: state.extra as WeighIn?),
+          ),
+        ),
+        GoRoute(
+          path: 'data',
+          pageBuilder: (context, state) =>
+              _platformPage(context, state, const YourDataPage()),
+        ),
+      ],
     ),
+    GoRoute(path: '/settings', redirect: (_, _) => '/profile'),
     GoRoute(
       path: '/exercises',
       pageBuilder: (context, state) =>
@@ -138,7 +168,7 @@ class PrimaryShell extends ConsumerWidget {
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: MediaQuery.sizeOf(context).width < 350 ? 16 : 20,
-                ),
+                ).copyWith(bottom: Space.sm),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 438),
                   child: Row(

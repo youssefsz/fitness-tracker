@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -96,7 +95,7 @@ class _ExercisePicker extends ConsumerWidget {
                           leading: ExerciseIcon(row.exercise.name),
                           subtitle:
                               '${row.exercise.measurement.label} · '
-                              '${row.latest == null ? 'No entries yet' : 'Last set ${measure(row.latest!, row.exercise.measurement, style)}'}',
+                              '${row.latest == null ? 'No entries yet' : 'Latest ${measure(row.latest!, row.exercise.measurement, style)}'}',
                           icon: selected == id ? LucideIcons.check : null,
                           onTap: () {
                             ref.read(actionsProvider).select();
@@ -224,15 +223,17 @@ class _LogPageState extends ConsumerState<LogPage> {
     final changesUnit =
         replacing != null &&
         replacing.exercise.measurement != exercise.measurement;
-    if (changesUnit && replacing.hasEnteredValues) {
+    final dropsSets =
+        replacing != null && !exercise.trackSets && replacing.sets.length > 1;
+    if (replacing != null &&
+        ((changesUnit && replacing.hasEnteredValues) || dropsSets)) {
       _confirming = true;
       final confirmed = await confirmAction(
         context,
         title: 'Switch to ${exercise.name}?',
-        message:
-            'This exercise uses different units. The set values for '
-            '${replacing.exercise.name} will be cleared. Your date, notes, '
-            'and other exercises stay in the draft.',
+        message: changesUnit
+            ? 'This exercise uses a different measurement. The values for ${replacing.exercise.name} will be cleared.'
+            : 'This exercise logs one result. Only the first value will carry over.',
         label: 'Switch exercise',
       );
       _confirming = false;
@@ -253,6 +254,13 @@ class _LogPageState extends ConsumerState<LogPage> {
         _selectedGroup = replacement;
         replacing.dispose();
       } else {
+        if (dropsSets) {
+          for (final set in replacing.sets.skip(1)) {
+            set.dispose();
+          }
+          replacing.sets.removeRange(1, replacing.sets.length);
+          replacing.activeSet = replacing.sets.single;
+        }
         replacing.exercise = exercise;
       }
       _error = null;
@@ -345,14 +353,14 @@ class _LogPageState extends ConsumerState<LogPage> {
       _attempted = true;
       _error = null;
     });
-    final invalid = _groups
-        .expand((group) => group.sets)
-        .where((set) => set.value == null)
-        .firstOrNull;
-    if (!_form.currentState!.validate() || invalid != null) {
-      setState(() => _error = 'Check the set values before saving.');
-      invalid?.focusInvalid();
-      return;
+    _form.currentState!.validate();
+    for (final group in _groups) {
+      final invalid = group.sets.where((set) => set.value == null).firstOrNull;
+      if (invalid != null) {
+        setState(() => _error = 'Check the values before saving.');
+        _activateSet(group, invalid, invalid: true);
+        return;
+      }
     }
     FocusScope.of(context).unfocus();
     setState(() => _busy = true);
@@ -362,7 +370,9 @@ class _LogPageState extends ConsumerState<LogPage> {
           exerciseId: group.exercise.id,
           day: _day,
           notes: group.notes.text,
-          sets: group.sets.map((s) => (id: s.id, value: s.value!)),
+          sets: group.sets.map(
+            (s) => (id: s.id, value: s.value!, reps: s.reps),
+          ),
         ),
     ];
     try {
@@ -380,7 +390,7 @@ class _LogPageState extends ConsumerState<LogPage> {
         setState(
           () => _error = describeError(
             error,
-            fallback: 'Couldn’t save your sets. Your draft is still here.',
+            fallback: 'Couldn’t save your activity. Your draft is still here.',
           ),
         );
       }
@@ -430,31 +440,100 @@ class _LogPageState extends ConsumerState<LogPage> {
     }
   }
 
-  void _addSet(_ExerciseInput group) {
-    final set = _SetInput(group.exercise.measurement, null);
-    setState(() => group.sets.add(set));
+  void _activateSet(
+    _ExerciseInput group,
+    _SetInput set, {
+    bool invalid = false,
+  }) {
+    setState(() => group.activeSet = set);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) set.firstFocus.requestFocus();
+      if (!mounted || group.activeSet != set || !group.sets.contains(set)) {
+        return;
+      }
+      if (invalid) {
+        set.focusInvalid();
+      } else {
+        set.firstFocus.requestFocus();
+      }
     });
   }
 
+  void _addSet(_ExerciseInput group) {
+    final set = _SetInput(group.exercise.measurement, null);
+    group.sets.add(set);
+    _activateSet(group, set);
+  }
+
   void _removeSet(_ExerciseInput group, _SetInput set) {
-    setState(() => group.sets.remove(set));
+    setState(() {
+      final index = group.sets.indexOf(set);
+      group.sets.removeAt(index);
+      if (group.activeSet == set) {
+        group.activeSet = group.sets.elementAtOrNull(index) ?? group.sets.last;
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => set.dispose());
   }
 
-  void _next(_ExerciseInput group, int index) {
-    final next = group.sets.elementAtOrNull(index + 1);
-    if (next != null) {
-      next.firstFocus.requestFocus();
-    } else {
-      FocusScope.of(context).unfocus();
+  Widget _valueInput(_SetInput set, {required bool autofocus}) {
+    final timed = set.measurement == Measurement.duration;
+    final paired = set.measurement.needsReps;
+
+    Widget field(String label, {bool secondary = false, double size = 56}) =>
+        Column(
+          children: [
+            LargeNumberField(
+              label: label,
+              controller: secondary ? set.second : set.first,
+              focusNode: secondary ? set.secondFocus : set.firstFocus,
+              autofocus: autofocus && !secondary,
+              enabled: !_busy,
+              fontSize: size,
+              decimal: !secondary && set.measurement.usesWeight,
+              hint: timed && secondary
+                  ? '00'
+                  : !secondary && set.measurement.usesWeight
+                  ? '0.0'
+                  : '0',
+              next: !secondary && (timed || paired),
+              validator: (_) => secondary ? set.secondError : set.firstError,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: !secondary && (timed || paired)
+                  ? (_) => set.secondFocus.requestFocus()
+                  : (_) => FocusScope.of(context).unfocus(),
+            ),
+            Text(label, style: context.type.labelLarge),
+          ],
+        );
+
+    if (!timed && !paired) {
+      return field(set.measurement.usesWeight ? 'kg' : 'Reps');
     }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: timed ? 1 : 3,
+          child: field(timed ? 'Minutes' : 'kg', size: timed ? 48 : 56),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: Space.md),
+          child: Text(timed ? ':' : '×', style: context.type.headlineMedium),
+        ),
+        Expanded(
+          flex: timed ? 1 : 2,
+          child: field(
+            timed ? 'Seconds' : 'Reps',
+            secondary: true,
+            size: timed ? 48 : 40,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _group(_ExerciseInput input, DurationStyle style) {
-    final timed = input.exercise.measurement == Measurement.duration;
-    final valid = input.sets.map((s) => s.value).nonNulls.toList();
+    final active = input.activeSet;
     return Column(
       key: ObjectKey(input),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,122 +574,56 @@ class _LogPageState extends ConsumerState<LogPage> {
             ],
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.md, bottom: Space.sm),
-          child: ExcludeSemantics(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Text('Set', style: context.type.labelMedium),
+        const SizedBox(height: Space.md),
+        if (input.showsSets)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Set ${input.sets.indexOf(active) + 1}',
+                  style: context.type.labelLarge,
                 ),
-                Expanded(
-                  child: Text(
-                    timed ? 'Minutes' : 'Reps',
-                    style: context.type.labelMedium,
-                  ),
-                ),
-                if (timed) ...[
-                  const SizedBox(width: Space.sm),
-                  Expanded(
-                    child: Text('Seconds', style: context.type.labelMedium),
-                  ),
-                ],
-                const SizedBox(width: Space.target),
-              ],
-            ),
-          ),
-        ),
-        for (final (index, set) in input.sets.indexed)
-          Padding(
-            key: ObjectKey(set),
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 13),
-                    child: Text(
-                      '${index + 1}',
-                      style: context.type.titleSmall,
-                      semanticsLabel: 'Set ${index + 1}',
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextFormField(
-                    controller: set.first,
-                    focusNode: set.firstFocus,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    textInputAction: timed || index < input.sets.length - 1
-                        ? TextInputAction.next
-                        : TextInputAction.done,
-                    decoration: InputDecoration(
-                      labelText: timed ? 'Minutes' : 'Reps',
-                      hintText: timed ? '0' : null,
-                      floatingLabelBehavior: FloatingLabelBehavior.never,
-                    ),
-                    validator: (_) => set.firstError,
-                    onChanged: (_) => setState(() {}),
-                    onFieldSubmitted: (_) => timed
-                        ? set.secondFocus.requestFocus()
-                        : _next(input, index),
-                  ),
-                ),
-                if (timed) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: set.second,
-                      focusNode: set.secondFocus,
-                      enabled: !_busy,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textInputAction: index < input.sets.length - 1
-                          ? TextInputAction.next
-                          : TextInputAction.done,
-                      decoration: const InputDecoration(
-                        labelText: 'Seconds',
-                        hintText: '0',
-                        floatingLabelBehavior: FloatingLabelBehavior.never,
-                      ),
-                      validator: (_) => set.secondError,
-                      onChanged: (_) => setState(() {}),
-                      onFieldSubmitted: (_) => _next(input, index),
-                    ),
-                  ),
-                ],
+              ),
+              if (input.sets.length > 1)
                 RoundControl(
                   LucideIcons.circleMinus,
-                  'Remove set ${index + 1}',
-                  input.sets.length > 1 && !_busy
-                      ? () => _removeSet(input, set)
-                      : null,
+                  'Remove set ${input.sets.indexOf(active) + 1}',
+                  _busy ? null : () => _removeSet(input, active),
                 ),
-              ],
-            ),
+            ],
           ),
-        QuietButton(
-          'Add set',
-          _busy || input.sets.length >= maxSetsPerEntry
-              ? null
-              : () => _addSet(input),
-          icon: LucideIcons.plus,
+        KeyedSubtree(
+          key: ObjectKey(active),
+          child: _valueInput(
+            active,
+            autofocus: _entry == null && input == _selectedGroup,
+          ),
         ),
-        if (valid.isNotEmpty) ...[
-          Text(
-            '${_entry == null ? '' : 'Latest ${measure(valid.last, input.exercise.measurement, style)} · '}'
-            'Best ${measure(valid.reduce((a, b) => a > b ? a : b), input.exercise.measurement, style)}'
-            '${_entry == null ? ' · ' : '\n'}'
-            'Total ${measure(valid.fold(0, (a, b) => a + b), input.exercise.measurement, style)}',
-            style: context.type.bodySmall,
+        const SizedBox(height: Space.md),
+        for (final (index, set) in input.sets.indexed)
+          if (set != active)
+            RowLink(
+              key: ObjectKey(set),
+              title: 'Set ${index + 1}',
+              detail: switch (set.value) {
+                final value? => measure(
+                  value,
+                  set.measurement,
+                  style,
+                  reps: set.reps,
+                ),
+                null => 'Incomplete',
+              },
+              onTap: _busy ? null : () => _activateSet(input, set),
+            ),
+        if (input.exercise.trackSets)
+          QuietButton(
+            'Add set',
+            _busy || input.sets.length >= maxSetsPerEntry
+                ? null
+                : () => _addSet(input),
+            icon: LucideIcons.plus,
           ),
-          const SizedBox(height: Space.sm),
-        ],
         if (_groups.length > 1) _notes(input),
         const Divider(),
       ],
@@ -713,6 +726,10 @@ class _LogPageState extends ConsumerState<LogPage> {
     final style = ref.watch(durationProvider);
     final count = _groups.fold(0, (sum, group) => sum + group.sets.length);
     final fields = <Widget>[
+      for (final group in _groups) ...[
+        const SizedBox(height: Space.md),
+        _group(group, style),
+      ],
       RowLink(
         title: fullDay(_day),
         subtitle: _entry == null && _day == today ? 'Today' : null,
@@ -726,10 +743,6 @@ class _LogPageState extends ConsumerState<LogPage> {
         showChevron: false,
         onTap: _busy ? null : () => _changeDay(today),
       ),
-      for (final group in _groups) ...[
-        const SizedBox(height: 18),
-        _group(group, style),
-      ],
       if (_entry == null)
         Align(
           alignment: Alignment.centerLeft,
@@ -743,7 +756,9 @@ class _LogPageState extends ConsumerState<LogPage> {
     ];
     final footer = ActionFooter(
       label: _entry == null
-          ? 'Save $count ${count == 1 ? 'set' : 'sets'}'
+          ? _groups.every((group) => group.exercise.trackSets)
+                ? 'Save $count ${count == 1 ? 'set' : 'sets'}'
+                : 'Save activity'
           : 'Save changes',
       busy: _busy,
       onPressed: _save,
@@ -835,7 +850,10 @@ class _ExerciseInput {
   final String originalNotes;
   final List<RecordedSet>? originalSets;
   final List<_SetInput> sets;
+  late _SetInput activeSet = sets.last;
   bool showNotes;
+
+  bool get showsSets => exercise.trackSets || (originalSets?.length ?? 0) > 1;
 
   bool get hasEnteredValues => sets.any(
     (set) => set.first.text.isNotEmpty || set.second.text.isNotEmpty,
@@ -850,7 +868,9 @@ class _ExerciseInput {
     return sets.length != original.length ||
         sets.indexed.any((item) {
           final (i, set) = item;
-          return set.id != original[i].id || set.value != original[i].value;
+          return set.id != original[i].id ||
+              set.value != original[i].value ||
+              set.reps != original[i].reps;
         });
   }
 
@@ -870,12 +890,14 @@ class _SetInput {
             ? ''
             : measurement == Measurement.duration
             ? '${original.value ~/ 60}'
-            : '${original.value}',
+            : measureValue(original.value, measurement, DurationStyle.seconds),
       ),
       second = TextEditingController(
-        text: original == null || measurement != Measurement.duration
+        text: original == null
             ? ''
-            : '${original.value % 60}',
+            : measurement == Measurement.duration
+            ? (original.value % 60).toString().padLeft(2, '0')
+            : original.reps?.toString() ?? '',
       );
 
   final Measurement measurement;
@@ -883,26 +905,37 @@ class _SetInput {
   final TextEditingController first, second;
   final firstFocus = FocusNode(), secondFocus = FocusNode();
 
-  int? get _minutes => int.tryParse(first.text.isEmpty ? '0' : first.text);
-  int? get _seconds => int.tryParse(second.text.isEmpty ? '0' : second.text);
-  int? get _duration =>
-      _minutes == null || _minutes! > maxSetValue ~/ 60 || _seconds == null
-      ? null
-      : _minutes! * 60 + _seconds!;
+  bool get _timed => measurement == Measurement.duration;
+  int? get _minutes =>
+      first.text.trim().isEmpty ? 0 : int.tryParse(first.text, radix: 10);
+  int? get _seconds =>
+      second.text.trim().isEmpty ? 0 : int.tryParse(second.text, radix: 10);
+  int? get reps => measurement.needsReps
+      ? int.tryParse(second.text.trim(), radix: 10)
+      : null;
 
   String? get firstError {
-    if (measurement == Measurement.repetitions) {
-      return setValueError(int.tryParse(first.text));
+    if (!_timed) {
+      return exerciseValueError(
+        parseExerciseValue(first.text, measurement),
+        measurement,
+      );
     }
-    return _minutes == null || _minutes! > maxSetValue ~/ 60
-        ? 'Enter fewer minutes.'
+    final minutes = _minutes;
+    return minutes == null || minutes < 0 || minutes > maxSetValue ~/ 60
+        ? 'Enter valid minutes.'
         : null;
   }
 
   String? get secondError {
-    if (measurement == Measurement.repetitions) return null;
-    if (_seconds == null || _seconds! > 59) return 'Enter 0 to 59.';
-    if (firstError == null && (_duration == 0 || _duration! > maxSetValue)) {
+    if (measurement.needsReps) {
+      return exerciseValueError(reps, Measurement.repetitions);
+    }
+    if (!_timed) return null;
+    final seconds = _seconds;
+    if (seconds == null || seconds < 0 || seconds > 59) return 'Enter 0 to 59.';
+    if (first.text.trim().isEmpty && second.text.trim().isEmpty ||
+        firstError == null && _minutes! * 60 + seconds > maxSetValue) {
       return 'Enter a valid duration.';
     }
     return null;
@@ -910,9 +943,9 @@ class _SetInput {
 
   int? get value => firstError != null || secondError != null
       ? null
-      : measurement == Measurement.repetitions
-      ? int.tryParse(first.text)
-      : _duration;
+      : _timed
+      ? _minutes! * 60 + _seconds!
+      : parseExerciseValue(first.text, measurement);
 
   void focusInvalid() =>
       (firstError != null ? firstFocus : secondFocus).requestFocus();

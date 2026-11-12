@@ -7,8 +7,8 @@ import '../../shared/domain/training.dart';
 import '../../shared/widgets/ui.dart';
 
 enum ChartMetric {
-  latest('Latest set'),
-  best('Best set'),
+  latest('Latest result'),
+  best('Best result'),
   volume('Daily volume');
 
   const ChartMetric(this.label);
@@ -107,7 +107,7 @@ class _PerformanceChartState extends State<PerformanceChart> {
       (max, d) => math.max(max, metric.read(d)),
     );
     final step = _gridStep(maxValue);
-    final ceiling = (maxValue / step).ceil() * step;
+    final ceiling = math.max(step, (maxValue / step).ceil() * step);
     final ticks = [
       0,
       for (var value = step; value <= ceiling; value += step) value,

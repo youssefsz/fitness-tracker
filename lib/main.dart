@@ -57,6 +57,7 @@ class _FitnessAppState extends ConsumerState<FitnessApp> {
   @override
   Widget build(BuildContext context) {
     final opening = ref.watch(bootstrapProvider);
+    if (opening.hasValue) ref.watch(recoverProfilePhotoProvider);
     final preferences = opening.hasValue
         ? ref.watch(preferencesProvider)
         : const AsyncLoading<Preferences>();

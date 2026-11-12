@@ -63,24 +63,23 @@ class _EntryRowState extends ConsumerState<EntryRow> {
     final style = ref.watch(durationProvider);
     final entry = widget.entry, exercise = widget.exercise;
     final m = exercise.measurement;
-    final summary =
-        '${entry.sets.length} ${entry.sets.length == 1 ? 'set' : 'sets'} · ${measure(entry.total, m, style)} total';
+    final showSets = exercise.trackSets || entry.sets.length > 1;
+    final summary = showSets
+        ? '${entry.sets.length} ${entry.sets.length == 1 ? 'set' : 'sets'}'
+              '${m.usesWeight ? '' : ' · ${measure(entry.total, m, style)} total'}'
+        : null;
     if (widget.compact) {
       final show = entry.sets
           .take(4)
-          .map((s) => measureValue(s.value, m, style))
+          .map((s) => measure(s.value, m, style, reps: s.reps))
           .join(' · ');
-      final units = m == Measurement.repetitions
-          ? ' reps'
-          : style == DurationStyle.seconds
-          ? ' sec'
-          : '';
       return RowLink(
         title: exercise.name,
         leading: ExerciseIcon(exercise.name),
-        subtitle:
-            '${widget.showDate ? '${shortDay(entry.day)} · ' : ''}$summary',
-        detail: '$show$units${entry.sets.length > 4 ? ' …' : ''}',
+        subtitle: widget.showDate
+            ? '${shortDay(entry.day)}${summary == null ? '' : ' · $summary'}'
+            : summary,
+        detail: '$show${entry.sets.length > 4 ? ' …' : ''}',
         detailStyle: context.type.labelLarge,
         showChevron: false,
         onTap: () => context.push(
@@ -104,10 +103,14 @@ class _EntryRowState extends ConsumerState<EntryRow> {
                     widget.showDate ? fullDay(entry.day) : exercise.name,
                     style: context.type.titleMedium,
                   ),
-                  Text(
-                    widget.showDate ? '${exercise.name} · $summary' : summary,
-                    style: context.type.bodySmall,
-                  ),
+                  if (widget.showDate || summary != null)
+                    Text(
+                      [
+                        if (widget.showDate) exercise.name,
+                        ?summary,
+                      ].join(' · '),
+                      style: context.type.bodySmall,
+                    ),
                 ],
               ),
             ),
@@ -134,36 +137,22 @@ class _EntryRowState extends ConsumerState<EntryRow> {
           runSpacing: 9,
           children: [
             for (final set in entry.sets)
-              Semantics(
-                label:
-                    'Set ${set.position + 1}: ${measure(set.value, m, style, accessible: true)}',
-                child: ExcludeSemantics(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        measureValue(set.value, m, style),
-                        style: context.type.titleMedium,
-                      ),
-                      Text(
-                        m == Measurement.repetitions
-                            ? 'reps'
-                            : style == DurationStyle.seconds
-                            ? 'sec'
-                            : 'min:sec',
-                        style: context.type.labelSmall,
-                      ),
-                    ],
-                  ),
-                ),
+              Text(
+                measure(set.value, m, style, reps: set.reps),
+                style: context.type.titleMedium,
+                semanticsLabel:
+                    '${showSets ? 'Set ${set.position + 1}: ' : ''}'
+                    '${measure(set.value, m, style, accessible: true, reps: set.reps)}',
               ),
           ],
         ),
-        const SizedBox(height: 7),
-        Text(
-          'Latest ${measure(entry.latest, m, style)} · Best ${measure(entry.best, m, style)}',
-          style: context.type.bodySmall,
-        ),
+        if (entry.sets.length > 1) ...[
+          const SizedBox(height: 7),
+          Text(
+            'Latest ${measure(entry.latest, m, style, reps: entry.sets.last.reps)} · Best ${measure(entry.best, m, style)}',
+            style: context.type.bodySmall,
+          ),
+        ],
         if (entry.notes case final note?) ...[
           const SizedBox(height: 7),
           Text(note, style: context.type.bodyMedium),

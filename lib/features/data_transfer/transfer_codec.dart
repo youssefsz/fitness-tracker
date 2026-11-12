@@ -2,16 +2,23 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 
 const backupFormat = 'fitness-backup';
 const activityFormat = 'fitness-activity-import';
 const transferVersion = 1;
+const backupVersion = 2;
+const heightUnitBackupVersion = 3;
+const activityBackupVersion = 4;
+const activityImportVersion = 2;
+const legacyMeasurements = [Measurement.repetitions, Measurement.duration];
 const maxTransferBytes = 20 * 1024 * 1024;
 const maxTransferEntries = 20000;
 const maxTransferSets = 100000;
 const maxTransferExercises = 3000;
 const maxTransferReceipts = 20000;
+const maxTransferWeighIns = 100000;
 const _pretty = JsonEncoder.withIndent('  ');
 
 class ActivityRecord {
@@ -19,13 +26,13 @@ class ActivityRecord {
     this.day,
     this.name,
     this.measurement,
-    Iterable<int> sets,
+    Iterable<DraftSet> sets,
     this.notes,
   ) : sets = List.unmodifiable(sets);
   final CalendarDay day;
   final String name;
   final Measurement measurement;
-  final List<int> sets;
+  final List<DraftSet> sets;
   final String? notes;
 
   String get key => activityKey(name, measurement);
@@ -42,7 +49,16 @@ class ActivityBatch {
   late final String fingerprint = _hash([
     activityFormat,
     transferVersion,
-    for (final r in records) [r.day.iso, r.key, r.sets, r.notes],
+    for (final r in records)
+      [
+        r.day.iso,
+        r.key,
+        [
+          for (final set in r.sets)
+            if (set.reps case final reps?) [set.value, reps] else set.value,
+        ],
+        r.notes,
+      ],
   ]);
 }
 
@@ -161,7 +177,12 @@ class _Field {
   }
 }
 
-_Field _root(String text, String format, List<String> fields) {
+_Field _root(
+  String text,
+  String format,
+  List<String> fields, {
+  List<String> backupFields = const [],
+}) {
   if (text.length > maxTransferBytes ||
       utf8.encode(text).length > maxTransferBytes) {
     throw const FormatException(
@@ -174,13 +195,31 @@ _Field _root(String text, String format, List<String> fields) {
   if (root.value case {'format': final String actual} when actual != format) {
     throw FormatException('This is $actual. Expected $format.');
   }
-  if (root.value case {'schemaVersion': final int version}
-      when version != transferVersion) {
+  final version = switch (root.value) {
+    {'schemaVersion': final int value} => value,
+    _ => null,
+  };
+  final isBackup = format == backupFormat;
+  final latest = isBackup ? activityBackupVersion : activityImportVersion;
+  if (version != null && (version < transferVersion || version > latest)) {
     throw FormatException(
-      'Version $version is not supported. This app reads version $transferVersion.',
+      'Version $version is not supported. This app reads versions 1 through $latest.',
     );
   }
-  root.object(['format', 'schemaVersion', ...fields]);
+  final optionalBody = isBackup && version == activityBackupVersion;
+  final requiredBody =
+      isBackup &&
+      (version == backupVersion || version == heightUnitBackupVersion);
+  final keys = root.object([
+    'format',
+    'schemaVersion',
+    ...fields,
+    if (requiredBody) ...backupFields,
+  ], optional: optionalBody ? backupFields : const []);
+  if (optionalBody &&
+      keys.containsKey('profile') != keys.containsKey('weighIns')) {
+    root.fail('A backup must include both profile and weigh-ins, or neither.');
+  }
   if (root.get('format').value != format) {
     root.get('format').fail('Expected "$format".');
   }
@@ -192,6 +231,7 @@ _Field _root(String text, String format, List<String> fields) {
 
 ActivityBatch decodeActivity(String text, CalendarDay today) {
   final root = _root(text, activityFormat, ['records']);
+  final legacy = root.get('schemaVersion').value == transferVersion;
   var count = 0;
   final records = <ActivityRecord>[];
   for (final row
@@ -203,12 +243,27 @@ ActivityBatch decodeActivity(String text, CalendarDay today) {
     if (count > maxTransferSets) {
       row.fail('The file contains more than $maxTransferSets sets.');
     }
+    final measurement = exercise
+        .get('measurement')
+        .choice(legacy ? legacyMeasurements : Measurement.values);
     records.add(
       ActivityRecord(
         row.get('date').day(today: today),
         exercise.get('name').name(),
-        exercise.get('measurement').choice(Measurement.values),
-        sets.map((s) => s.integer(1, maxSetValue)),
+        measurement,
+        sets.map((s) {
+          if (!measurement.usesWeight) {
+            return (id: null, value: s.integer(0, maxSetValue), reps: null);
+          }
+          s.object(['grams', if (measurement.needsReps) 'reps']);
+          return (
+            id: null,
+            value: s.get('grams').integer(0, maxSetValue),
+            reps: measurement.needsReps
+                ? s.get('reps').integer(0, maxSetValue)
+                : null,
+          );
+        }),
         row.get('notes').notes(),
       ),
     );
@@ -225,6 +280,7 @@ Map<String, Object?> _exerciseJson(Exercise x) => {
   'id': x.id,
   'name': x.name,
   'measurement': x.measurement.name,
+  if (!x.trackSets) 'trackSets': false,
   'archived': x.archived,
   'createdAt': x.createdAt.toUtc().toIso8601String(),
   'updatedAt': x.updatedAt.toUtc().toIso8601String(),
@@ -239,7 +295,12 @@ Map<String, Object?> _entryJson(Entry e, {bool includeOrder = true}) => {
   'updatedAt': e.updatedAt.toUtc().toIso8601String(),
   'sets': [
     for (final s in e.sets)
-      {'id': s.id, 'position': s.position, 'value': s.value},
+      {
+        'id': s.id,
+        'position': s.position,
+        'value': s.value,
+        if (s.reps != null) 'reps': s.reps,
+      },
   ],
 };
 Map<String, Object?> _goalJson(Goal g) => {
@@ -283,41 +344,80 @@ Map<String, Object?> _backupJson(BackupData data) => {
         'importedAt': data.receipts[id]!.toUtc().toIso8601String(),
       },
   ],
+  if (data.body case final body?) ...{
+    'profile': {
+      'displayName': body.profile.displayName,
+      'heightMillimeters': body.profile.heightMillimeters,
+      'weightUnit': body.profile.weightUnit.name,
+      if (body.profile.heightUnit != HeightUnit.cm)
+        'heightUnit': body.profile.heightUnit.name,
+    },
+    'weighIns': [
+      for (final item
+          in (body.weighIns.toList()..sort((a, b) => a.day.compareTo(b.day))))
+        {'date': item.day.iso, 'grams': item.grams},
+    ],
+  },
 };
 
 String backupFingerprint(BackupData data) => _hash(_backupJson(data));
 
 String encodeBackup(BackupData data, DateTime exportedAt) => _pretty.convert({
   'format': backupFormat,
-  'schemaVersion': transferVersion,
+  'schemaVersion': _backupVersion(data),
   'exportedAt': exportedAt.toUtc().toIso8601String(),
   ..._backupJson(data),
 });
 
+int _backupVersion(BackupData data) {
+  if (data.exercises.any((e) => e.measurement.usesWeight || !e.trackSets) ||
+      data.entries.any((e) => e.sets.any((s) => s.value == 0))) {
+    return activityBackupVersion;
+  }
+  return switch (data.body?.profile.heightUnit) {
+    null => transferVersion,
+    HeightUnit.cm => backupVersion,
+    HeightUnit.ftIn => heightUnitBackupVersion,
+  };
+}
+
 BackupData decodeBackup(String text, CalendarDay today) {
-  final root = _root(text, backupFormat, [
-    'exportedAt',
-    'exercises',
-    'entries',
-    'goals',
-    'settings',
-    'importReceipts',
-  ]);
+  final root = _root(
+    text,
+    backupFormat,
+    [
+      'exportedAt',
+      'exercises',
+      'entries',
+      'goals',
+      'settings',
+      'importReceipts',
+    ],
+    backupFields: ['profile', 'weighIns'],
+  );
   root.get('exportedAt').timestamp();
-  final ids = <String>{}, names = <String>{};
+  final extended = root.get('schemaVersion').value == activityBackupVersion;
+  final measurements = <String, Measurement>{};
+  final names = <String>{};
   final exercises = <Exercise>[];
   for (final row in root.get('exercises').list(limit: maxTransferExercises)) {
-    row.object([
+    final keys = row.object([
       'id',
       'name',
       'measurement',
       'archived',
       'createdAt',
       'updatedAt',
-    ]);
+    ], optional: extended ? ['trackSets'] : const []);
     final id = row.get('id').identifier();
     final name = row.get('name').name();
-    if (!ids.add(id)) row.get('id').fail('Duplicate exercise ID.');
+    if (measurements.containsKey(id)) {
+      row.get('id').fail('Duplicate exercise ID.');
+    }
+    final measurement = row
+        .get('measurement')
+        .choice(extended ? Measurement.values : legacyMeasurements);
+    measurements[id] = measurement;
     if (!names.add(normalizeName(name))) {
       row.get('name').fail('Duplicate exercise name.');
     }
@@ -330,7 +430,9 @@ BackupData decodeBackup(String text, CalendarDay today) {
       Exercise(
         id: id,
         name: name,
-        measurement: row.get('measurement').choice(Measurement.values),
+        measurement: measurement,
+        trackSets:
+            !keys.containsKey('trackSets') || row.get('trackSets').boolean(),
         archived: row.get('archived').boolean(),
         createdAt: created,
         updatedAt: updated,
@@ -355,14 +457,18 @@ BackupData decodeBackup(String text, CalendarDay today) {
     final exerciseId = row.get('exerciseId').identifier();
     final order = row.get('order').integer(1, maxEntryOrder);
     if (!entryIds.add(id)) row.get('id').fail('Duplicate entry ID.');
-    if (!ids.contains(exerciseId)) {
-      row.get('exerciseId').fail('Unknown exercise ID.');
-    }
+    final measurement = measurements[exerciseId];
+    if (measurement == null) row.get('exerciseId').fail('Unknown exercise ID.');
     if (!orders.add(order)) row.get('order').fail('Duplicate entry order.');
     final sets = <RecordedSet>[];
     final positions = <int>{};
     for (final set in row.get('sets').list(limit: maxSetsPerEntry, min: 1)) {
-      set.object(['id', 'position', 'value']);
+      set.object([
+        'id',
+        'position',
+        'value',
+        if (measurement.needsReps) 'reps',
+      ]);
       final setId = set.get('id').identifier();
       final position = set.get('position').integer(0, maxSetsPerEntry - 1);
       if (!setIds.add(setId)) set.get('id').fail('Duplicate set ID.');
@@ -372,7 +478,10 @@ BackupData decodeBackup(String text, CalendarDay today) {
       sets.add((
         id: setId,
         position: position,
-        value: set.get('value').integer(1, maxSetValue),
+        value: set.get('value').integer(extended ? 0 : 1, maxSetValue),
+        reps: measurement.needsReps
+            ? set.get('reps').integer(0, maxSetValue)
+            : null,
       ));
     }
     if (setIds.length > maxTransferSets) {
@@ -405,7 +514,9 @@ BackupData decodeBackup(String text, CalendarDay today) {
   for (final row in root.get('goals').list(limit: maxTransferExercises)) {
     row.object(['exerciseId', 'target', 'deadline', 'updatedAt']);
     final id = row.get('exerciseId').identifier();
-    if (!ids.contains(id)) row.get('exerciseId').fail('Unknown exercise ID.');
+    if (!measurements.containsKey(id)) {
+      row.get('exerciseId').fail('Unknown exercise ID.');
+    }
     if (!goalIds.add(id)) {
       row.get('exerciseId').fail('Only one goal is allowed for each exercise.');
     }
@@ -440,6 +551,9 @@ BackupData decodeBackup(String text, CalendarDay today) {
     entries: entries,
     goals: goals,
     receipts: receipts,
+    body: (root.value as Map<String, Object?>).containsKey('profile')
+        ? _decodeBody(root, today)
+        : null,
     preferences: (
       appearance: settings.get('appearance').choice(Appearance.values),
       duration: settings.get('duration').choice(DurationStyle.values),
@@ -448,9 +562,49 @@ BackupData decodeBackup(String text, CalendarDay today) {
   );
 }
 
+BodyData _decodeBody(_Field root, CalendarDay today) {
+  final profile = root.get('profile');
+  final version = root.get('schemaVersion').value;
+  final needsHeightUnit = version == heightUnitBackupVersion;
+  final keys = profile.object([
+    'displayName',
+    'heightMillimeters',
+    'weightUnit',
+    if (needsHeightUnit) 'heightUnit',
+  ], optional: version == activityBackupVersion ? ['heightUnit'] : const []);
+  final nameField = profile.get('displayName');
+  final name = nameField.value == null
+      ? null
+      : nameField.string(min: 0, max: maxDisplayName);
+  if (displayNameError(name ?? '') case final error?) nameField.fail(error);
+  final height = profile.get('heightMillimeters');
+  final dates = <CalendarDay>{};
+  final weighIns = <WeighIn>[];
+  for (final row in root.get('weighIns').list(limit: maxTransferWeighIns)) {
+    row.object(['date', 'grams']);
+    final date = row.get('date');
+    final day = date.day(today: today);
+    if (!dates.add(day)) date.fail('Duplicate weigh-in date.');
+    weighIns.add((
+      day: day,
+      grams: row.get('grams').integer(1, maxWeightGrams),
+    ));
+  }
+  return BodyData((
+    displayName: name == null || name.trim().isEmpty ? null : name.trim(),
+    heightMillimeters: height.value == null
+        ? null
+        : height.integer(1, maxHeightMillimeters),
+    heightUnit: keys.containsKey('heightUnit')
+        ? profile.get('heightUnit').choice(HeightUnit.values)
+        : defaultProfileDetails.heightUnit,
+    weightUnit: profile.get('weightUnit').choice(WeightUnit.values),
+  ), weighIns);
+}
+
 String activityExample(CalendarDay today) => _pretty.convert({
   'format': activityFormat,
-  'schemaVersion': transferVersion,
+  'schemaVersion': activityImportVersion,
   'records': [
     {
       'date': today.iso,
@@ -467,6 +621,26 @@ String activityExample(CalendarDay today) => _pretty.convert({
       'sets': [100, 90],
       'notes': null,
     },
+    {
+      'date': today.iso,
+      'exercise': {
+        'name': 'Pull-ups',
+        'measurement': Measurement.repetitions.name,
+      },
+      'sets': [0],
+      'notes': 'Could not complete a rep.',
+    },
+    {
+      'date': today.iso,
+      'exercise': {
+        'name': 'Bench press',
+        'measurement': Measurement.weightAndReps.name,
+      },
+      'sets': [
+        {'grams': 60000, 'reps': 8},
+      ],
+      'notes': null,
+    },
   ],
 });
 
@@ -479,16 +653,18 @@ String aiPrompt(DateTime localNow, {List<Exercise> catalog = const []}) {
   return '''
 You are converting exercise history explicitly supplied by the user into JSON for a fitness tracker.
 
-Return the $activityFormat version $transferVersion format shown below.
+Return the $activityFormat version $activityImportVersion format shown below.
 
 Current local date: ${day.iso}. Local time zone: ${localNow.timeZoneName} (UTC$utc).
-Only include activity the user actually reported completing. Do not invent exercises, dates, set breakdowns, values, personal records, or goals.
+Only include activity or attempts the user actually reported. Do not invent exercises, dates, set breakdowns, values, personal records, or goals.
 
 Use YYYY-MM-DD activity dates. Resolve relative dates from the relevant message context. Do not reinterpret every historical "today" as the current date. If a date or essential value cannot be determined, ask a concise clarification question before producing the final JSON.
 
-Use measurement "repetitions" for repetition counts and "duration" for timed activity. Store timed sets as positive whole seconds. Every set is a whole number from 1 to $maxSetValue, and each entry needs 1 to $maxSetsPerEntry sets.
+Use "repetitions" for rep counts and "duration" for whole seconds. Their sets are arrays of whole numbers. Use "weight" for load only, with each set written as {"grams": 60000}. Use "weightAndReps" when both load and reps were reported, with each set written as {"grams": 60000, "reps": 8}. Convert kilograms to grams by multiplying by 1000 and pounds by multiplying by 453.59237, then round to the nearest whole gram.
 
-Preserve the order in which sets were reported. For example, three sets of ten may become [10, 10, 10]. A statement of thirty total repetitions does not establish three sets of ten; ask for the missing breakdown where necessary.
+All result values must be whole numbers from 0 to $maxSetValue. Record a reported attempt with zero reps as [0]. Do not use zero for missing information or for a day with no reported activity. Never output negative values. Each entry needs 1 to $maxSetsPerEntry results. If the user reports one result, use one item in the sets array.
+
+Preserve the order in which sets were reported. Three sets of ten become [10, 10, 10]. If only a total of thirty reps was reported, use [30].
 
 Preserve separate entries and genuine repeated sets. Preserve decreases in performance.
 
@@ -507,8 +683,10 @@ String encodeCsv(BackupData data) {
       final day = a.day.compareTo(b.day);
       return day == 0 ? a.order.compareTo(b.order) : day;
     });
+  final includesReps = data.exercises.any((e) => e.measurement.needsReps);
   final out = StringBuffer(
-    'date,exercise,measurement,unit,entry_id,set_id,set_number,value,notes,created_at_utc,updated_at_utc\r\n',
+    'date,exercise,measurement,unit,entry_id,set_id,set_number,value,'
+    '${includesReps ? 'reps,' : ''}notes,created_at_utc,updated_at_utc\r\n',
   );
   String csv(String text, {bool userText = false}) {
     if (userText && RegExp(r'^(?:[\t\r\n]|\s*[=+\-@＝＋－＠])').hasMatch(text)) {
@@ -529,7 +707,8 @@ String encodeCsv(BackupData data) {
           csv(e.id),
           csv(s.id),
           s.position + 1,
-          s.value,
+          measureValue(s.value, x.measurement, DurationStyle.seconds),
+          if (includesReps) s.reps ?? '',
           csv(e.notes ?? '', userText: true),
           e.createdAt.toUtc().toIso8601String(),
           '${e.updatedAt.toUtc().toIso8601String()}\r',

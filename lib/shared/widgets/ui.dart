@@ -363,7 +363,6 @@ Route<T> platformPageRoute<T>(BuildContext context, WidgetBuilder builder) =>
 PreferredSizeWidget secondaryBar(
   BuildContext context, {
   String? title,
-  String? back,
   List<Widget>? actions,
 }) => AppBar(
   automaticallyImplyLeading: false,
@@ -372,13 +371,8 @@ PreferredSizeWidget secondaryBar(
       ? null
       : Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
   titleTextStyle: context.type.titleMedium,
-  leading: back == null
-      ? BackButton(onPressed: () => Navigator.maybePop(context))
-      : TextButton(
-          onPressed: () => Navigator.maybePop(context),
-          child: Text(back),
-        ),
-  leadingWidth: back == null ? 56 : 88,
+  leading: BackButton(onPressed: () => Navigator.maybePop(context)),
+  leadingWidth: 56,
   actions: actions,
 );
 
@@ -449,7 +443,7 @@ class FormLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: secondaryBar(context, title: title, back: 'Cancel'),
+    appBar: secondaryBar(context, title: title),
     body: ScreenScroll(width: width, children: children),
     bottomNavigationBar: footer == null ? null : KeyboardFooter(child: footer!),
   );
@@ -546,6 +540,33 @@ class RowLink extends StatelessWidget {
   );
 }
 
+class SwitchRow extends StatelessWidget {
+  const SwitchRow({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+    super.key,
+  });
+
+  final String title;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile.adaptive(
+    contentPadding: EdgeInsets.zero,
+    controlAffinity: ListTileControlAffinity.trailing,
+    title: Text(title, style: context.type.titleSmall),
+    subtitle: subtitle == null
+        ? null
+        : Text(subtitle!, style: context.type.bodySmall),
+    value: value,
+    onChanged: onChanged,
+  );
+}
+
 class FormProblem extends StatelessWidget {
   const FormProblem(this.message, {super.key});
   final String? message;
@@ -564,6 +585,66 @@ class FormProblem extends StatelessWidget {
             ),
           ),
         );
+}
+
+class LargeNumberField extends StatelessWidget {
+  const LargeNumberField({
+    required this.label,
+    required this.controller,
+    this.focusNode,
+    this.enabled = true,
+    this.autofocus = false,
+    this.decimal = false,
+    this.hint = '0',
+    this.fontSize = 56,
+    this.next = false,
+    this.onChanged,
+    this.onSubmitted,
+    this.validator,
+    super.key,
+  });
+
+  final String label, hint;
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final bool enabled, autofocus, decimal, next;
+  final double fontSize;
+  final ValueChanged<String>? onChanged, onSubmitted;
+  final FormFieldValidator<String>? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = context.type.headlineLarge!.copyWith(fontSize: fontSize);
+    return Semantics(
+      label: label,
+      child: TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled,
+        autofocus: autofocus,
+        onChanged: onChanged,
+        onFieldSubmitted: onSubmitted,
+        validator: validator,
+        style: style,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+        textInputAction: next ? TextInputAction.next : TextInputAction.done,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: style.copyWith(color: context.colors.muted),
+          contentPadding: const EdgeInsets.symmetric(vertical: Space.xs),
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          errorMaxLines: 3,
+        ),
+      ),
+    );
+  }
 }
 
 Future<bool> confirmAction(

@@ -21,7 +21,6 @@ class ProgressPage extends ConsumerStatefulWidget {
 }
 
 class _ProgressPageState extends ConsumerState<ProgressPage> {
-  String? _exercise;
   RangeSelection _range = allTime;
 
   Future<void> _pickExercise(List<CatalogItem> list, String current) async {
@@ -33,16 +32,24 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
           (
             value: row.exercise.id,
             label: row.exercise.name,
-            subtitle:
-                '${row.exercise.measurement.label}${row.exercise.archived ? ' · Archived' : ''}',
+            subtitle: row.exercise.measurement.label,
           ),
       ],
       selected: current,
       leading: (_, name) => ExerciseIcon(name),
     );
-    if (!mounted || id == null || id == current) return;
-    ref.read(actionsProvider).select();
-    setState(() => _exercise = id);
+    if (!mounted || id == null) return;
+    if (id != current) ref.read(actionsProvider).select();
+    try {
+      await ref.read(repositoryProvider).saveProgressExercise(id);
+    } catch (error) {
+      if (mounted) {
+        announce(
+          context,
+          describeError(error, fallback: 'Couldn’t remember this exercise.'),
+        );
+      }
+    }
   }
 
   @override
@@ -58,7 +65,10 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
           ref.watch(catalogProvider),
           retry: () => ref.invalidate(catalogProvider),
           builder: (list) {
-            if (list.isEmpty || !list.any((row) => row.count > 0)) {
+            final tracked = list
+                .where((row) => !row.exercise.archived && row.count > 0)
+                .toList();
+            if (tracked.isEmpty) {
               return EmptyBlock(
                 title: 'See how your sets change',
                 message: 'Record a result to see its first, latest, and best values here.',
@@ -66,36 +76,41 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
                 onAction: () => showLogSheet(context),
               );
             }
-            final tracked = list.where((row) => row.count > 0).toList();
-            final exercise =
-                (tracked
-                            .where((row) => row.exercise.id == _exercise)
-                            .firstOrNull ??
-                        tracked.first)
-                    .exercise;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FilterButton(
-                  exercise.name,
-                  () => _pickExercise(tracked, exercise.id),
-                  leading: ExerciseIcon(exercise.name),
-                  prominent: true,
-                ),
-                FilterButton(_range.preset.label, () async {
-                  final range = await selectRange(context, _range, today);
-                  if (mounted && range != null) {
-                    ref.read(actionsProvider).select();
-                    setState(() => _range = range);
-                  }
-                }),
-                PerformanceView(
-                  key: ValueKey(exercise.id),
-                  exercise: exercise,
-                  range: selectionBounds(_range, today),
-                  link: true,
-                ),
-              ],
+            return AsyncPanel(
+              ref.watch(progressExerciseProvider),
+              retry: () => ref.invalidate(progressExerciseProvider),
+              builder: (selected) {
+                final exercise =
+                    (tracked
+                                .where((row) => row.exercise.id == selected)
+                                .firstOrNull ??
+                            tracked.first)
+                        .exercise;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilterButton(
+                      exercise.name,
+                      () => _pickExercise(tracked, exercise.id),
+                      leading: ExerciseIcon(exercise.name),
+                      prominent: true,
+                    ),
+                    FilterButton(_range.preset.label, () async {
+                      final range = await selectRange(context, _range, today);
+                      if (mounted && range != null) {
+                        ref.read(actionsProvider).select();
+                        setState(() => _range = range);
+                      }
+                    }),
+                    PerformanceView(
+                      key: ValueKey(exercise.id),
+                      exercise: exercise,
+                      range: selectionBounds(_range, today),
+                      link: true,
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -132,8 +147,8 @@ class PerformanceView extends ConsumerWidget {
               if (rangeAction != null)
                 SectionTitle('Performance', action: rangeAction),
               const EmptyBlock(
-                title: 'No sets in this range',
-                message: 'Choose a wider date range or record another set.',
+                title: 'No activity in this range',
+                message: 'Choose a wider date range or log another result.',
               ),
             ],
           );
@@ -196,29 +211,31 @@ class PerformanceView extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   stats,
-                  const SizedBox(height: 18),
-                  const Divider(),
-                  const SizedBox(height: 14),
-                  SectionTitle(
-                    'Total volume',
-                    action: Text(
-                      measure(data.total, exercise.measurement, style),
-                      style: context.type.titleMedium,
-                      textAlign: TextAlign.end,
+                  if (!exercise.measurement.usesWeight) ...[
+                    const SizedBox(height: 18),
+                    const Divider(),
+                    const SizedBox(height: 14),
+                    SectionTitle(
+                      'Total volume',
+                      action: Text(
+                        measure(data.total, exercise.measurement, style),
+                        style: context.type.titleMedium,
+                        textAlign: TextAlign.end,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${data.setCount} ${data.setCount == 1 ? 'set' : 'sets'} across ${data.days.length} '
-                    '${data.days.length == 1 ? 'recorded date' : 'recorded dates'}',
-                    style: context.type.bodySmall,
-                  ),
-                  PerformanceChart(
-                    days: data.days,
-                    metric: ChartMetric.volume,
-                    measurement: exercise.measurement,
-                    durationStyle: style,
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${data.setCount} ${data.setCount == 1 ? 'result' : 'results'} across ${data.days.length} '
+                      '${data.days.length == 1 ? 'recorded date' : 'recorded dates'}',
+                      style: context.type.bodySmall,
+                    ),
+                    PerformanceChart(
+                      days: data.days,
+                      metric: ChartMetric.volume,
+                      measurement: exercise.measurement,
+                      durationStyle: style,
+                    ),
+                  ],
                   if (link)
                     QuietButton(
                       'View exercise details',
@@ -262,7 +279,7 @@ class PerformanceSummary extends StatelessWidget {
               style: context.type.headlineMedium,
             ),
             Text(
-              'Latest set · ${shortDay(data.latestDay!)}',
+              'Latest result · ${shortDay(data.latestDay!)}',
               style: context.type.bodySmall,
             ),
           ],
@@ -281,7 +298,7 @@ class PerformanceSummary extends StatelessWidget {
                   color: delta > 0 ? context.colors.green : context.colors.ink,
                 ),
               ),
-              Text('vs first recorded set', style: context.type.bodySmall),
+              Text('vs first result', style: context.type.bodySmall),
             ],
           )
         else

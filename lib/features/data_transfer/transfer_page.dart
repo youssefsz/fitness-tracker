@@ -309,7 +309,9 @@ class _TransferPageState extends ConsumerState<TransferPage> {
         final confirm = await confirmAction(
           context,
           title: 'Replace all local data?',
-          message: 'Exercises, entries, goals, and preferences will be replaced. A recovery backup is saved on this device first.',
+          message: _backup!.body == null
+              ? 'Workouts, goals, and preferences will be replaced. Your profile and weigh-ins stay on this device. A recovery backup is saved first.'
+              : 'Workouts, goals, preferences, profile details, and weigh-ins will be replaced. Your photo stays on this device. A recovery backup is saved first.',
           label: 'Replace data',
           destructive: true,
         );
@@ -363,7 +365,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
             context,
             mode == RestoreMode.merge
                 ? 'Backup merged.'
-                : 'Backup restored. Recovery copy available in Settings.',
+                : 'Backup restored. Recovery copy available under Your data.',
           );
           Navigator.pop(context);
         }
@@ -437,7 +439,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
           RowLink(
             title: '${record.name} · ${fullDay(record.day)}',
             subtitle:
-                '${record.sets.take(8).join(' · ')}${record.sets.length > 8 ? ' …' : ''} ${record.measurement.unit}',
+                '${record.sets.take(8).map((s) => measure(s.value, record.measurement, DurationStyle.seconds, reps: s.reps)).join(' · ')}${record.sets.length > 8 ? ' …' : ''}',
           ),
         FormProblem(_mappingProblem),
       ],
@@ -496,6 +498,13 @@ class _TransferPageState extends ConsumerState<TransferPage> {
           '${data.entries.length} entries and ${data.goals.length} goals.',
           style: context.type.titleMedium,
         ),
+        if (data.body case final body?)
+          Text(
+            _mode == RestoreMode.merge
+                ? 'Add ${body.weighIns.length} weigh-ins and fill in missing profile details.'
+                : 'Restore profile details and ${body.weighIns.length} weigh-ins.',
+            style: context.type.bodySmall,
+          ),
         const SizedBox(height: 4),
         Text(
           '${plan.duplicates} already present · ${plan.conflicts.length} conflicts · '

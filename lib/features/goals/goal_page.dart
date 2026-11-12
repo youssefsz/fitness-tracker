@@ -129,9 +129,25 @@ class GoalPage extends ConsumerStatefulWidget {
 }
 
 class _GoalPageState extends ConsumerState<GoalPage> {
-  late final _value = TextEditingController(
-    text: widget.original?.target.toString(),
-  );
+  late final _value = TextEditingController(text: _originalValue);
+  String get _originalValue => widget.original == null
+      ? ''
+      : measureValue(
+          widget.original!.target,
+          widget.exercise.measurement,
+          DurationStyle.seconds,
+        );
+
+  int? get _target =>
+      parseExerciseValue(_value.text, widget.exercise.measurement);
+
+  String? _targetError(int? value) {
+    if (!widget.exercise.measurement.usesWeight) return setValueError(value);
+    return value == 0
+        ? 'Enter a target greater than zero.'
+        : exerciseValueError(value, widget.exercise.measurement);
+  }
+
   late CalendarDay? _deadline = widget.original?.deadline;
   bool _busy = false;
   String? _error;
@@ -155,8 +171,8 @@ class _GoalPageState extends ConsumerState<GoalPage> {
 
   Future<void> _save() async {
     if (_busy) return;
-    final target = int.tryParse(_value.text);
-    if (setValueError(target) case final error?) {
+    final target = _target;
+    if (_targetError(target) case final error?) {
       setState(() => _error = error);
       return;
     }
@@ -209,7 +225,7 @@ class _GoalPageState extends ConsumerState<GoalPage> {
     final style = ref.watch(durationProvider);
     final today = ref.watch(todayProvider);
     final best = widget.data.best;
-    final target = int.tryParse(_value.text);
+    final target = _target;
     final bestByDeadline = _deadline == null
         ? best
         : widget.data.days
@@ -218,7 +234,7 @@ class _GoalPageState extends ConsumerState<GoalPage> {
     String format(int value) => measure(value, measurement, style);
     return ProtectDraft<void>(
       dirty:
-          _value.text != (widget.original?.target.toString() ?? '') ||
+          _value.text != _originalValue ||
           _deadline != widget.original?.deadline,
       busy: _busy,
       child: FormLayout(
@@ -250,8 +266,13 @@ class _GoalPageState extends ConsumerState<GoalPage> {
           TextField(
             controller: _value,
             enabled: !_busy,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            keyboardType: TextInputType.numberWithOptions(
+              decimal: measurement.usesWeight,
+            ),
+            inputFormatters: [
+              if (!measurement.usesWeight)
+                FilteringTextInputFormatter.digitsOnly,
+            ],
             style: context.type.headlineMedium,
             decoration: lineInput(
               context,
@@ -269,7 +290,7 @@ class _GoalPageState extends ConsumerState<GoalPage> {
             style: context.type.bodySmall,
           ),
           if (target != null &&
-              setValueError(target) == null &&
+              _targetError(target) == null &&
               bestByDeadline != null) ...[
             const SizedBox(height: Space.lg),
             LinearProgressIndicator(
@@ -304,11 +325,10 @@ class _GoalPageState extends ConsumerState<GoalPage> {
           ],
           const SizedBox(height: 24),
           const Divider(),
-          SwitchListTile.adaptive(
+          SwitchRow(
             value: _deadline != null,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Target date'),
-            subtitle: const Text('Optional. Leave it open-ended.'),
+            title: 'Target date',
+            subtitle: 'Optional. Leave it open-ended.',
             onChanged: _busy
                 ? null
                 : (enabled) {

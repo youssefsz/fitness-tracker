@@ -35,9 +35,9 @@ class OverviewPage extends ConsumerWidget {
               : '${value.value!.exercises.length} ${value.value!.exercises.length == 1 ? 'exercise' : 'exercises'} · '
                     'Since ${fullDay(value.value!.firstDay!)}',
           action: RoundControl(
-            LucideIcons.settings,
-            'Settings',
-            () => context.push('/settings'),
+            LucideIcons.userRound,
+            'Profile',
+            () => context.push('/profile'),
           ),
         ),
         AsyncPanel(
@@ -62,7 +62,7 @@ class OverviewPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Pick an exercise, enter your reps or time, and choose the date.',
+                        'Pick an exercise, enter your result, and choose the date.',
                         style: context.type.bodyLarge?.copyWith(
                           color: context.colors.muted,
                         ),
@@ -73,6 +73,11 @@ class OverviewPage extends ConsumerWidget {
                         child: const Text('Record your first result'),
                       ),
                       const SizedBox(height: 4),
+                      if (catalog.value?.isNotEmpty ?? false)
+                        QuietButton(
+                          'Manage exercises',
+                          () => context.push('/exercises'),
+                        ),
                       QuietButton(
                         'Import a backup',
                         () => context.push('/transfer/backup'),
@@ -92,7 +97,8 @@ class OverviewPage extends ConsumerWidget {
               retry: () => ref.invalidate(catalogProvider),
               builder: (items) {
                 final map = {
-                  for (final row in items) row.exercise.id: row.exercise,
+                  for (final row in items)
+                    if (!row.exercise.archived) row.exercise.id: row.exercise,
                 };
                 final recentByDay = <CalendarDay, List<Entry>>{};
                 for (final entry in data.recent) {
@@ -172,7 +178,9 @@ class _ExerciseSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final measurement = exercise.measurement;
     final change = summary.latest - summary.first;
-    final percent = (change / summary.first * 100).round();
+    final percent = summary.first == 0
+        ? null
+        : (change / summary.first * 100).round();
     return Column(
       children: [
         Material(
@@ -203,11 +211,11 @@ class _ExerciseSummary extends StatelessWidget {
                         'Best ${measure(summary.best, measurement, style)} · First ${measure(summary.first, measurement, style)}',
                         style: context.type.bodySmall,
                       ),
-                      if (exercise.archived)
-                        Text('Archived', style: context.type.bodySmall),
-                      if (summary.count > 1)
+                      if (summary.count > 1 && (percent != null || change != 0))
                         Text(
-                          '${signed(percent)}% since first',
+                          percent == null
+                              ? '${changeText(change, measurement, style)} since first'
+                              : '${signed(percent)}% since first',
                           style: context.type.labelMedium?.copyWith(
                             color: change > 0
                                 ? context.colors.green
@@ -228,7 +236,7 @@ class _ExerciseSummary extends StatelessWidget {
                             measure(summary.latest, measurement, style),
                             style: context.type.titleMedium,
                             semanticsLabel:
-                                'Latest set: ${measure(summary.latest, measurement, style, accessible: true)}',
+                                'Latest result: ${measure(summary.latest, measurement, style, accessible: true)}',
                           ),
                           Text(
                             shortDay(summary.latestDay),

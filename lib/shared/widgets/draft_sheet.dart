@@ -85,15 +85,45 @@ class SheetLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboard),
-      child: LayoutBuilder(
-        builder: (context, limits) => SizedBox(
-          height: (limits.maxHeight * (keyboard > 0 ? 1 : 0.84)).clamp(
-            0.0,
-            720.0,
-          ),
+    final media = MediaQuery.of(context);
+    final keyboard = media.viewInsets.bottom;
+    // iOS already reports animated insets. Android can report a single jump.
+    final animateInsets =
+        Theme.of(context).platform == TargetPlatform.android &&
+        !media.disableAnimations;
+
+    return LayoutBuilder(
+      builder: (context, limits) {
+        final restingHeight = (limits.maxHeight * 0.84).clamp(0.0, 720.0);
+        return TweenAnimationBuilder<double>(
+          tween: Tween(end: keyboard),
+          duration: animateInsets
+              ? const Duration(milliseconds: 220)
+              : Duration.zero,
+          curve: Curves.easeOutCubic,
+          builder: (context, inset, panel) {
+            final availableHeight = (limits.maxHeight - inset).clamp(
+              0.0,
+              restingHeight,
+            );
+            final bottomPadding = (media.viewPadding.bottom - inset).clamp(
+              0.0,
+              media.viewPadding.bottom,
+            );
+            return Padding(
+              padding: EdgeInsets.only(bottom: inset),
+              child: SizedBox(
+                height: availableHeight,
+                child: MediaQuery(
+                  data: media.copyWith(
+                    viewInsets: media.viewInsets.copyWith(bottom: inset),
+                    padding: media.padding.copyWith(bottom: bottomPadding),
+                  ),
+                  child: panel!,
+                ),
+              ),
+            );
+          },
           child: Column(
             children: [
               Padding(
@@ -121,11 +151,11 @@ class SheetLayout extends StatelessWidget {
               if (footer case final footer?)
                 footer
               else
-                SizedBox(height: MediaQuery.paddingOf(context).bottom),
+                const SafeArea(top: false, child: SizedBox.shrink()),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
