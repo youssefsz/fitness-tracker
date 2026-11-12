@@ -54,3 +54,5 @@ XCTest uses the actual iOS share sheet and document picker. It checks cancellati
 - The shipped Flutter logo is 5.8 KiB. The screenshot references and raster masters are excluded from the app assets.
 
 No Android or iPad device was launched. Host widgets cover narrow phones and a tablet-sized layout. Saving to an external share destination, selecting an external file from the native picker, physical haptics, and release performance were outside these checks.
+
+The final simulator install was relaunched with the demo database. Overview rendered in light and dark appearance. The database retained 6 exercises, 536 entries, 1,649 sets, and 5 goals from 13 March through 12 November 2026. The light Overview was left open. A cold launch recording showed the V launch screen and launcher icon. On the debug reinstall, the simulator showed a black interval before the native launch screen appeared.
