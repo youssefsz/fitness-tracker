@@ -55,16 +55,29 @@ export function apkUrl({ tag, apk }) {
   return `${github}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(apk)}`;
 }
 
+function apkSize(release) {
+  return new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(release.download.size / 1_000_000);
+}
+
+export function latestStable(releases) {
+  return releases.find((release) => !release.prerelease);
+}
+
+export function renderHome(template, releases) {
+  const latest = latestStable(releases);
+  return latest ? template.replace('<!-- FITNESS_LATEST -->',
+    `<p class="download-version">Latest version ${escape(latest.tag)} · ${apkSize(latest)} MB</p>`) : template;
+}
+
 function renderRelease(release, latest) {
-  const { tag, date, download, checksum, prerelease, notes } = release;
+  const { tag, date, checksum, prerelease, notes } = release;
   const assets = `${github}/releases/download/${encodeURIComponent(tag)}`;
   const heading = latest ? 'h2' : 'h3';
-  const size = new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(download.size / 1_000_000);
   return `<article class="release-entry">
     <${heading}>${latest ? 'Latest stable · ' : ''}${escape(tag)}${prerelease ? ' · Prerelease' : ''}</${heading}>
     <p><time datetime="${date.toISOString()}">${dateFormat.format(date)}</time></p>
     <div class="release-actions">
-      <a${latest ? ' class="download-button"' : ''} href="${apkUrl(release)}">Download APK · ${size} MB</a>
+      <a${latest ? ' class="download-button"' : ''} href="${apkUrl(release)}">Download APK · ${apkSize(release)} MB</a>
       ${checksum ? `<a href="${assets}/SHA256SUMS.txt">SHA-256 checksum</a>` : ''}
       <a href="${github}/releases/tag/${encodeURIComponent(tag)}">View on GitHub</a>
     </div>
@@ -75,9 +88,8 @@ function renderRelease(release, latest) {
   </article>`;
 }
 
-export function renderDownloads(template, items) {
-  const releases = publishedApks(items);
-  const latest = releases.find((release) => !release.prerelease);
+export function renderDownloads(template, releases) {
+  const latest = latestStable(releases);
   const older = releases.filter((release) => release !== latest);
   const sections = [
     latest ? renderRelease(latest, true) : '<p>No stable Android releases yet.</p>',

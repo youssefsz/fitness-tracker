@@ -406,3 +406,8 @@ h1 {
   letter-spacing: .03em;
 }
 .release-link { min-height: 28px; color: var(--accent); font-size: .875rem; }
+.home-actions .download-version {
+  color: var(--muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}

@@ -12,4 +12,4 @@ Open http://localhost:5501 to preview the static pages. Set `FITNESS_RELEASE_FIX
 
 Cloudflare Pages uses `landing-page` as the root, `npm run build` as the build command, and `dist` as the output directory. The production branch is `main`, previews are disabled, and the build watch include pattern is `landing-page/*`. The project serves `fitness-tracker.dhibi.tn`.
 
-The Downloads Pages Function reads published release metadata from GitHub and caches the rendered page for five minutes. A release refreshes the download list without a site deployment. GitHub serves the APKs and checksums.
+The homepage, download button, and Downloads page share published release metadata from GitHub and cache that feed for five minutes. A release refreshes the download list without a site deployment. GitHub serves the APKs and checksums.
