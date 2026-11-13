@@ -385,10 +385,15 @@ h1 {
 .release-notes pre { white-space: pre-wrap; }
 .release-notes li { margin-block: 4px; }
 
-@media (max-width: 360px) {
+@media (max-width: 520px) {
+  .site-nav { gap: 4px 12px; }
+}
+
+@media (max-width: 375px) {
   .site-header { gap: 6px; }
-  .site-nav { gap: 4px 9px; }
-  .theme-control select { max-width: 100px; }
+  .site-nav { gap: 4px 10px; }
+  .theme-control select { width: 46px; padding: 0; font-size: 0; }
+  .theme-control option { font-size: .875rem; }
 }
 
 .hero-download {

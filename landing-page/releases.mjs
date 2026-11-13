@@ -2,7 +2,7 @@ import MarkdownIt from 'markdown-it';
 
 const repository = 'youssefsz/fitness-tracker';
 const github = `https://github.com/${repository}`;
-const markdown = new MarkdownIt({ html: false });
+const markdown = new MarkdownIt({ html: false, linkify: true });
 const escape = markdown.utils.escapeHtml;
 const dateFormat = new Intl.DateTimeFormat('en', {
   month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
