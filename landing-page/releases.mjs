@@ -22,7 +22,13 @@ export async function listReleases() {
   for (let page = 1; ; page += 1) {
     const response = await fetch(
       `https://api.github.com/repos/${repository}/releases?per_page=100&page=${page}`,
-      { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(20_000) },
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'Fitness-Tracker-Website',
+        },
+        signal: AbortSignal.timeout(20_000),
+      },
     );
     if (!response.ok) throw new Error(`GitHub Releases returned HTTP ${response.status}.`);
     releases.push(...await response.json());
