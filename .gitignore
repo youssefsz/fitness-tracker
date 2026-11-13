@@ -46,3 +46,21 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local contributor preferences, credentials, and signing files
+/.local/
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.mobileprovision
+
+# Local workout databases
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Landing site dependencies
+/landing-page/node_modules/
+/landing-page/dist/

@@ -120,6 +120,9 @@ void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   Future<void> capture(String name) async {
+    // These optional QA captures use the iOS screenshot path. Keep the
+    // behavior checks independent of screenshot setup on other targets.
+    if (!Platform.isIOS) return;
     final bytes = await binding.takeScreenshot(name);
     const hostPath = String.fromEnvironment('V_QA_PATH');
     final base = await getTemporaryDirectory();

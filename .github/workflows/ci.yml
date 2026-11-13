@@ -1,0 +1,64 @@
+name: Flutter CI
+
+on:
+  workflow_call:
+  push:
+    branches: ['**']
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'integration_test/**'
+      - 'assets/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'tool/**'
+      - 'docs/schema/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'analysis_options.yaml'
+      - '.metadata'
+      - '.github/workflows/**'
+      - '!**/*.md'
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'integration_test/**'
+      - 'assets/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'tool/**'
+      - 'docs/schema/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'analysis_options.yaml'
+      - '.metadata'
+      - '.github/workflows/**'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, analyze, and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: flutter-checks-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub

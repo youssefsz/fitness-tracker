@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageColor
 
 root = Path(__file__).resolve().parents[1]
-brand = json.loads((root / "tool/brand.json").read_text())
+brand = json.loads((root / "tool/brand.json").read_text(encoding="utf-8"))
 name = brand["name"]
 masters = root / "tool/brand_sources"
 ios = root / "ios/Runner"
@@ -26,7 +26,7 @@ def save(image, path):
 
 def write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_bytes(content.encode("utf-8"))
 
 
 def metadata(path, images=None, colors=None):
@@ -50,7 +50,7 @@ save(mark.resize((144, 144), resample), root / "assets/brand/mark.png")
 
 # Apple's square source stays opaque. Each catalog slot keeps its original scale.
 app_icons = catalog / "AppIcon.appiconset"
-for slot in json.loads((app_icons / "Contents.json").read_text())["images"]:
+for slot in json.loads((app_icons / "Contents.json").read_text(encoding="utf-8"))["images"]:
     size = round(float(slot["size"].split("x")[0]) * int(slot["scale"][0]))
     save(icon.resize((size, size), resample), app_icons / slot["filename"])
 

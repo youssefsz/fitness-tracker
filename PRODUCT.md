@@ -12,7 +12,7 @@ Flutter and Dart for iOS, iPadOS, and Android.
 
 ## Purpose
 
-Fitness Tracker records completed exercise sets and shows how personal performance changes over time. People can log reps or timed efforts, correct dates and values, and set an optional best-set target.
+Fitness Tracker records completed exercise sets and shows how personal performance changes over time. People can log repetitions, duration, weight, or weight with reps. They can correct dates and values and set a personal goal for an exercise.
 
 ## Constraints
 

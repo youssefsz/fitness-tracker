@@ -41,43 +41,48 @@ appearance.addEventListener('change', () => {
     // The selection still applies to the current page.
   }
 });
-const tablist = document.querySelector('.feature-tabs');
-const tabs = Array.from(tablist.querySelectorAll('button'));
-const panels = tabs.map((tab) => document.getElementById(tab.getAttribute('aria-controls')));
+function setupFeatureTabs() {
+  const tablist = document.querySelector('.feature-tabs');
+  if (!tablist) return;
+  const tabs = Array.from(tablist.querySelectorAll('button'));
+  const panels = tabs.map((tab) => document.getElementById(tab.getAttribute('aria-controls')));
 
-function selectFeature(index, focus = false) {
-  tabs.forEach((tab, position) => {
-    const selected = position === index;
-    tab.setAttribute('aria-selected', String(selected));
-    tab.tabIndex = selected ? 0 : -1;
-    panels[position].hidden = !selected;
+  function selectFeature(index, focus = false) {
+    tabs.forEach((tab, position) => {
+      const selected = position === index;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      panels[position].hidden = !selected;
+    });
+
+    if (focus) tabs[index].focus();
+  }
+
+  tablist.setAttribute('role', 'tablist');
+  tabs.forEach((tab, index) => {
+    tab.setAttribute('role', 'tab');
+    panels[index].setAttribute('role', 'tabpanel');
+    panels[index].setAttribute('aria-labelledby', tab.id);
+    panels[index].tabIndex = 0;
+    tab.addEventListener('click', () => selectFeature(index));
   });
+  tablist.addEventListener('keydown', (event) => {
+    const current = tabs.indexOf(event.target);
+    if (current === -1) return;
 
-  if (focus) tabs[index].focus();
+    const shortcuts = {
+      ArrowRight: (current + 1) % tabs.length,
+      ArrowLeft: (current - 1 + tabs.length) % tabs.length,
+      Home: 0,
+      End: tabs.length - 1,
+    };
+    if (!Object.hasOwn(shortcuts, event.key)) return;
+
+    event.preventDefault();
+    selectFeature(shortcuts[event.key], true);
+  });
+  selectFeature(tabs.findIndex((tab) => tab.hasAttribute('data-default')));
+  tablist.hidden = false;
 }
 
-tablist.setAttribute('role', 'tablist');
-tabs.forEach((tab, index) => {
-  tab.setAttribute('role', 'tab');
-  panels[index].setAttribute('role', 'tabpanel');
-  panels[index].setAttribute('aria-labelledby', tab.id);
-  panels[index].tabIndex = 0;
-  tab.addEventListener('click', () => selectFeature(index));
-});
-tablist.addEventListener('keydown', (event) => {
-  const current = tabs.indexOf(event.target);
-  if (current === -1) return;
-
-  const shortcuts = {
-    ArrowRight: (current + 1) % tabs.length,
-    ArrowLeft: (current - 1 + tabs.length) % tabs.length,
-    Home: 0,
-    End: tabs.length - 1,
-  };
-  if (!Object.hasOwn(shortcuts, event.key)) return;
-
-  event.preventDefault();
-  selectFeature(shortcuts[event.key], true);
-});
-selectFeature(tabs.findIndex((tab) => tab.hasAttribute('data-default')));
-tablist.hidden = false;
+setupFeatureTabs();

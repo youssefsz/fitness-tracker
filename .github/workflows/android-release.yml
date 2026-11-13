@@ -1,0 +1,128 @@
+name: Android release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build and verify signed APK
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Verify the release version
+        shell: bash
+        run: |
+          version=$(yq -er '.version' pubspec.yaml)
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\+[1-9][0-9]*$ ]] ||
+             [[ "$GITHUB_REF_NAME" != "v${version%%+*}" ]]; then
+            echo "::error::Use a tag such as v1.2.0 and a matching pubspec.yaml version such as 1.2.0+3."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+
+      - name: Install Android SDK components
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+
+      - run: flutter pub get --enforce-lockfile
+
+      - name: Build signed release APK
+        shell: bash
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_PASSWORD: ${{ secrets.ANDROID_RELEASE_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_RELEASE_KEYSTORE_BASE64" || -z "$ANDROID_RELEASE_PASSWORD" ]]; then
+            echo "::error::Configure the Android signing secrets described in docs/android-release.md."
+            exit 1
+          fi
+          umask 077
+          ANDROID_RELEASE_KEYSTORE=$(mktemp "$RUNNER_TEMP/android-release.XXXXXX")
+          export ANDROID_RELEASE_KEYSTORE
+          trap 'rm -f -- "$ANDROID_RELEASE_KEYSTORE"' EXIT
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_RELEASE_KEYSTORE"
+          unset ANDROID_RELEASE_KEYSTORE_BASE64
+          flutter build apk --release
+
+      - name: Verify signature and prepare release files
+        shell: bash
+        run: |
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          signature=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk")
+          signer=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<< "$signature")
+          if ! grep -qx 'Number of signers: 1' <<< "$signature" ||
+             [[ "$signer" != "$(cat android/release-signing.sha256)" ]]; then
+            echo "::error::The APK signature does not match the Fitness Tracker release certificate."
+            exit 1
+          fi
+          mkdir release
+          name="Fitness-Tracker-$GITHUB_REF_NAME.apk"
+          cp "$apk" "release/$name"
+          cd release
+          sha256sum "$name" > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: android-release
+          path: release/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: android-release
+          path: release
+
+      - name: Publish APK and checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd release
+          sha256sum --check --strict SHA256SUMS.txt
+          apk="Fitness-Tracker-$GITHUB_REF_NAME.apk"
+          if existing=$(gh release view "$GITHUB_REF_NAME" --json isDraft,assets); then
+            if jq -e --arg apk "$apk" '
+              def uploaded($name): any(.assets[]; .name == $name and .state == "uploaded");
+              (.isDraft | not) and uploaded($apk) and uploaded("SHA256SUMS.txt")
+            ' <<< "$existing" >/dev/null; then
+              echo "The release already has its APK and checksum."
+              exit 0
+            fi
+            echo "::error::A draft or incomplete release exists for this tag. Inspect it in GitHub before retrying."
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" "$apk" SHA256SUMS.txt \
+            --verify-tag --title "Fitness Tracker $GITHUB_REF_NAME" --generate-notes

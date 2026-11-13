@@ -4,7 +4,7 @@ The app accepts UTF-8 JSON up to 20 MiB. Backups allow at most 3,000 exercises, 
 
 An activity date is a valid `YYYY-MM-DD` calendar date from 1900 onward. Activity cannot be in the future. A goal deadline can be in the future. Audit timestamps use ISO 8601 with the UTC suffix `Z`. Names are trimmed and limited to 80 characters. Name matching ignores case and runs of whitespace. Notes can be null or at most 2,000 characters.
 
-V validates the entire file before allowing confirmation. The first validation error names the field or record that needs correction. Unrecognized fields, unsupported versions, invalid references, and duplicate IDs are errors.
+Fitness Tracker validates the entire file before allowing confirmation. The first validation error names the field or record that needs correction. Unrecognized fields, unsupported versions, invalid references, and duplicate IDs are errors.
 
 ## Full backup
 
@@ -54,7 +54,7 @@ The app writes backup version 4 when an exercise tracks weight, has set tracking
 
 The profile name and height may be null. Names use one line and up to 60 characters. Height is a whole number from 1 to 3,000 millimeters. Version 2 uses centimeters for display. Version 3 adds `heightUnit` with `cm` or `ftIn`. Version 4 also accepts it and defaults to `cm`. The body weight display unit is `kg` or `lb`. Weigh-ins use past or present calendar dates and whole numbers from 1 to 1,000,000 grams. Each date appears at most once. The profile photo stays on its original device.
 
-**Merge** keeps device preferences and skips records with identical IDs and content. For conflicting IDs, the preview states what the local copy keeps and which incoming records are skipped. If a name matches under a different exercise ID, V keeps the local exercise and skips incoming entries and goals tied to the conflicting ID. Entries with different IDs and matching date and set values are flagged and kept when you confirm. New entries take local order numbers after existing entries, in the same relative order as in the backup. Merge comparisons ignore this local renumbering.
+**Merge** keeps device preferences and skips records with identical IDs and content. For conflicting IDs, the preview states what the local copy keeps and which incoming records are skipped. If a name matches under a different exercise ID, the app keeps the local exercise and skips incoming entries and goals tied to the conflicting ID. Entries with different IDs and matching date and set values are flagged and kept when you confirm. New entries take local order numbers after existing entries, in the same relative order as in the backup. Merge comparisons ignore this local renumbering.
 
 For profile data, merge fills missing details and adds weigh-ins on new dates. The preview identifies any conflicting profile values or weigh-ins and keeps the device's existing values.
 
@@ -62,7 +62,7 @@ For profile data, merge fills missing details and adds weigh-ins on new dates. T
 
 ## Activity import
 
-`fitness-activity-import` adds activity and leaves preferences and goals alone. The example below is also available from **Import from AI chat**. Each record contains actual sets, in the order entered. Array order matters when several entries share a date. V creates all record IDs.
+`fitness-activity-import` adds activity and leaves preferences and goals alone. The example below is also available from **Import from AI chat**. Each record contains actual sets, in the order entered. Array order matters when several entries share a date. The app creates all record IDs.
 
 ```json
 {
@@ -105,4 +105,4 @@ The fingerprint ignores JSON formatting, object key order, and differences that 
 
 ## CSV export
 
-CSV is for analysis. It contains one row per result, with its date, exercise, measurement, unit, IDs, set number, value, notes, and UTC timestamps. Durations use seconds and loads use kilograms. When an exercise tracks weight and reps, the CSV includes a separate `reps` column. V quotes text and prefixes formula-like exercise names and notes with an apostrophe. Use the JSON backup to restore a database.
+CSV is for analysis. It contains one row per result, with its date, exercise, measurement, unit, IDs, set number, value, notes, and UTC timestamps. Durations use seconds and loads use kilograms. When an exercise tracks weight and reps, the CSV includes a separate `reps` column. The app quotes text and prefixes formula-like exercise names and notes with an apostrophe. Use the JSON backup to restore a database.

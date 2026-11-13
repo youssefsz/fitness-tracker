@@ -75,7 +75,7 @@ button, select { font: inherit; }
   display: flex;
   min-height: 64px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
 }
 
@@ -150,31 +150,6 @@ h1 {
   font-size: clamp(1rem, 1.8vw, 1.25rem);
   text-wrap: pretty;
 }
-
-.stores {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px 16px;
-  margin-top: 23px;
-}
-
-.store {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-}
-
-.store button {
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  cursor: not-allowed;
-}
-
-.store img { width: auto; height: 40px; }
-.store span { color: var(--muted); font-size: 0.8125rem; }
 
 .preview-nav {
   display: flex;
@@ -331,7 +306,6 @@ h1 {
   .intro { padding-block: 25px 26px; }
   h1 { margin-top: 15px; }
   .intro-copy { margin-top: 9px; max-width: 28ch; }
-  .stores { margin-top: 19px; }
   .feature-tabs { margin-bottom: 13px; }
   .feature-tabs button { padding-inline: 7px; font-size: 0.875rem; }
   .feature-panel { width: min(100%, 276px); }
@@ -347,3 +321,88 @@ h1 {
   .feature-panel[role="tabpanel"] picture { animation: reveal-screen 160ms ease-out; }
   @keyframes reveal-screen { from { opacity: 0.72; } }
 }
+
+.site-nav, .footer-links, .page-index, .release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+.site-nav a {
+  display: inline-grid;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: .875rem;
+  text-decoration: none;
+}
+
+.site-nav a[aria-current="page"], .site-nav a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.footer-links { justify-content: center; }
+.home-actions { display: grid; justify-items: center; gap: 8px; margin-top: 23px; }
+.home-actions p { color: var(--muted); font-size: .875rem; }
+
+.download-button {
+  display: inline-grid;
+  place-items: center;
+  min-height: 46px;
+  padding: 9px 20px;
+  border-radius: 8px;
+  background: var(--lime);
+  color: #19271f;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.download-button:hover { background: #a7dc70; }
+
+.content-page { max-width: 780px; min-height: 58vh; padding-block: clamp(24px, 6vw, 75px) 20px; }
+.page-intro { margin-bottom: clamp(25px, 5vw, 45px); }
+.page-intro h1 { margin: 0 0 12px; font-size: clamp(2.4rem, 7vw, 4.8rem); text-wrap: initial; }
+.page-intro p { color: var(--muted); font-size: clamp(1rem, 2vw, 1.2rem); max-width: 55ch; }
+.page-index { border-block: 1px solid var(--line); padding-block: 13px; }
+.prose { max-width: 68ch; overflow-wrap: anywhere; }
+.prose h2, .release-list h2 { margin: 0 0 10px; font-size: clamp(1.35rem, 3vw, 1.8rem); line-height: 1.2; }
+.prose p + p, .release-list p + p { margin-top: 10px; }
+.prose ol { padding-left: 1.4rem; }
+.prose li + li { margin-top: .45em; }
+.prose section, .release-list + .prose { margin-top: 32px; }
+.prose a, .release-list a:not(.download-button), .page-index a { color: var(--accent); }
+.release-list { border-block: 1px solid var(--line); padding: 20px 0; }
+.release-entry { padding: 20px 0; overflow-wrap: anywhere; }
+.release-entry + .release-entry { border-top: 1px solid var(--line); }
+.release-list h2 + .release-entry { padding-top: 8px; }
+.release-entry h2, .release-entry h3 { margin: 0 0 3px; }
+.release-entry time { color: var(--muted); }
+.release-actions { margin-top: 12px; }
+.release-notes { margin-top: 12px; }
+.release-notes summary { cursor: pointer; padding-block: 8px; }
+.release-notes pre { white-space: pre-wrap; }
+.release-notes li { margin-block: 4px; }
+
+@media (max-width: 360px) {
+  .site-header { gap: 6px; }
+  .site-nav { gap: 4px 9px; }
+  .theme-control select { max-width: 100px; }
+}
+
+.hero-download {
+  grid-auto-flow: column;
+  gap: 11px;
+  min-height: 56px;
+  padding-inline: 15px;
+  border-radius: 11px;
+}
+.file-type {
+  padding-left: 10px;
+  border-left: 1px solid #19271f42;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+.release-link { min-height: 28px; color: var(--accent); font-size: .875rem; }

@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an improvement to Fitness Tracker.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe when the current app gets in your way.
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: What would help?
+      description: Describe the behavior you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds or examples
+      description: Share anything you tried or an example that explains the request.

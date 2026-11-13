@@ -1,45 +1,41 @@
-# Fitness Tracker
+<div align="center">
+  <img src="ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png" width="80" height="80" alt="Fitness Tracker app icon">
+  <h1>Fitness Tracker</h1>
+  <p>An offline workout log for iPhone, iPad, and Android.</p>
+  <p><a href="https://fitness-tracker.dhibi.tn/downloads/">Android downloads</a> · <a href="#run-locally">Run locally</a> · <a href="docs/README.md">Docs</a> · <a href="CONTRIBUTING.md">Contribute</a> · <a href="LICENSE">MIT license</a></p>
+</div>
 
-Fitness Tracker is an offline exercise log for iPhone, iPad, and Android. Record reps or timed sets, compare results, and keep a portable backup. The app starts with an empty log.
+Log reps, timed efforts, and weight with or without reps. Compare your results over time, revisit workouts in a calendar, and set personal goals. The app starts with an empty log and stores your records on your device. You can export a restorable JSON backup or a CSV for analysis.
 
-## Run the app
+## Screenshots
 
-Use Flutter 3.47.5 with Dart 3.13.4. The iOS build was developed with Xcode 27.0. Run these commands from the project root:
+Captured on an iPhone simulator with fictional workouts.
 
-```sh
+| Overview | Progress | History | Log |
+| :---: | :---: | :---: | :---: |
+| <a href="docs/screenshots/overview.webp"><img src="docs/screenshots/overview.webp" width="190" alt="Overview with latest results and trends by exercise"></a> | <a href="docs/screenshots/progress.webp"><img src="docs/screenshots/progress.webp" width="190" alt="Progress chart comparing push-up results over time"></a> | <a href="docs/screenshots/history.webp"><img src="docs/screenshots/history.webp" width="190" alt="History calendar and workouts on the selected date"></a> | <a href="docs/screenshots/log.webp"><img src="docs/screenshots/log.webp" width="190" alt="Log sheet with three push-up sets ready to save"></a> |
+
+## Run locally
+
+Follow [Flutter's installation guide](https://docs.flutter.dev/install) and use [Flutter 3.47.5](https://docs.flutter.dev/install/archive), which includes Dart 3.13.4. Once Flutter is on your PATH, you can run the [host checks](docs/testing.md#run-host-checks) on Windows, macOS, or Linux without a device or mobile SDK.
+
+To launch the app, set up an [Android target](https://docs.flutter.dev/platform-integration/android/setup) on Windows, macOS, or Linux, or an [iOS target](https://docs.flutter.dev/platform-integration/ios/setup) with Xcode on macOS. The app runs on Android, iPhone, and iPad. Windows, macOS, and Linux are development hosts.
+
+From the repository root, run:
+
+```text
+flutter doctor
 flutter pub get
-flutter run -d 15D09C3D-812A-408D-B323-8C56BE563D82
+flutter devices
+flutter run -d DEVICE_ID
 ```
 
-The device ID above is the designated iPhone 17 simulator on the development host. See [Testing](TESTING.md) for checks and device restrictions. The Apple bundle ID is `tn.dhibi.fitness-tracker`. Android application IDs disallow hyphens, so the Android ID is `tn.dhibi.fitness_tracker`.
+Replace `DEVICE_ID` with the ID of your emulator, simulator, or connected device. In `flutter doctor`, focus on the toolchain for your target. The app needs no account, Firebase project, or API keys. To try it with sample workouts, [generate a demo backup](docs/testing.md#load-fictional-demo-workouts).
 
-## Work on the app
+## Contribute
 
-- Read [Architecture](ARCHITECTURE.md) for SQLite, state, and analytics rules.
-- Read [Data formats](DATA_FORMAT.md) before changing backup or activity import.
-- See [Design](DESIGN.md) for the current visual system.
-- To change the Drift schema, edit `lib/core/database/database.dart`. Regenerate `database.g.dart` with `dart run build_runner build`. Bump the schema version, add the migration and its tests, then run `dart run drift_dev schema dump lib/core/database/database.dart docs/schema`.
+Read the [contribution guide](CONTRIBUTING.md) for local checks, issue reports, and pull requests. The [docs index](docs/README.md) links to the architecture, data formats, design rules, and screenshot capture instructions. Use the [private reporting instructions](SECURITY.md) for security issues.
 
-## Regenerate the brand assets
+## License
 
-Edit the display name in `tool/brand.json`. On macOS with Python and Pillow installed, run:
-
-```sh
-python3 tool/generate_brand_assets.py
-```
-
-The app icon and launch mark masters live in `tool/brand_sources`. The generator produces the Flutter logo in `assets/brand`, the iOS icon and launch catalogs, and the Android launcher and splash assets.
-
-Set the release version and build number in `pubspec.yaml` or through Flutter's build flags. The Profile footer reads the version and build number from the installed app.
-
-## Load the simulator demo
-
-The installed copy on the designated iPhone 17 can hold eight months of fictional activity for testing. The sample includes both measurement types, goals in different states, an archived exercise, and multiple entries on some dates. It does not load on a fresh install.
-
-To seed an empty installed copy on that simulator, run:
-
-```sh
-tool/seed_iphone17.sh
-```
-
-The script checks the simulator and preserves existing activity. It also writes the original demo snapshot to `build/qa/v-demo-data.json`. You can import that file through Settings to try the merge or restore flow. Treat the demo as fictional activity.
+Project source is available under the [MIT License](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for material covered by other terms.

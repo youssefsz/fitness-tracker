@@ -1,0 +1,41 @@
+name: Bug report
+description: Report something that does not work as expected.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Use sample data in any attachments.
+        For a suspected security issue, see SECURITY.md and report it privately.
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      placeholder: "Example: 1.0.0 (1)"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Platform, OS version, and device
+      placeholder: "Example: Android 16, Pixel emulator"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "Start with the screen you opened and the actions you took."
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual results
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Logs or screenshots
+      description: Remove personal data and credentials before attaching anything.

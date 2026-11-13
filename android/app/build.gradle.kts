@@ -4,6 +4,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseKeystore = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE")
+val releasePassword = providers.environmentVariable("ANDROID_RELEASE_PASSWORD")
+
 android {
     namespace = "tn.dhibi.fitness_tracker"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +32,27 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystore.orNull?.let { file(it) }
+            storeType = "PKCS12"
+            storePassword = releasePassword.orNull
+            keyAlias = "fitness-tracker"
+            keyPassword = releasePassword.orNull
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        check(!releaseKeystore.orNull.isNullOrBlank() && !releasePassword.orNull.isNullOrBlank()) {
+            "Set ANDROID_RELEASE_KEYSTORE and ANDROID_RELEASE_PASSWORD to build a release APK. See docs/android-release.md."
         }
     }
 }

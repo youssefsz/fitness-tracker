@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <title>Terms of use | Fitness Tracker</title>
+  <meta name="description" content="Terms for using the Fitness Tracker app and website.">
+  <link rel="canonical" href="https://fitness-tracker.dhibi.tn/terms/">
+  <link rel="icon" href="/assets/icon.png" type="image/png">
+  <script>
+    try {
+      const theme = localStorage.getItem('fitness-tracker-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch {
+      // The system theme still works when browser storage is unavailable.
+    }
+  </script>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="sun-icon" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42m0-14.14-1.42 1.42m-11.3 11.3-1.42 1.42"/>
+      </g>
+    </symbol>
+    <symbol id="moon-icon" viewBox="0 0 24 24">
+      <path d="M20.9 13.34A9 9 0 0 1 10.66 3.1 9 9 0 1 0 20.9 13.34Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="system-icon" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <rect x="3" y="4" width="18" height="13" rx="2"/>
+        <path d="M12 17v3m-4 0h8"/>
+      </g>
+    </symbol>
+  </svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header wrap">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/">Home</a>
+      <a href="/downloads/">Downloads</a>
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/youssefsz/fitness-tracker">GitHub</a>
+    </nav>
+    <label class="theme-control" hidden>
+      <svg aria-hidden="true" width="18" height="18"><use href="#system-icon"></use></svg>
+      <select id="theme" aria-label="Appearance">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  </header>
+
+  <main id="main" class="wrap content-page">
+    <div class="page-intro"><h1>Terms of use</h1><p>These terms cover the Fitness Tracker app and this website.</p></div>
+    <div class="prose">
+      <section><h2>Using the app</h2><p>Use Fitness Tracker to record and review workouts. It is a personal log and does not provide medical advice. You choose what to record and when to back up your data.</p></section>
+      <section><h2>Availability and backups</h2><p>The app and site are provided as available. Keep a backup of records you want to retain, especially before changing devices, uninstalling the app, or restoring a different backup.</p></section>
+      <section><h2>Source code</h2><p>The <a href="https://github.com/youssefsz/fitness-tracker/blob/main/LICENSE">MIT License</a> governs use and redistribution of the project source. See the <a href="https://github.com/youssefsz/fitness-tracker/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a> for material under separate terms.</p></section>
+      <section><h2>Contact</h2><p>Contact <a href="https://youssef.tn/#contact">Youssef Dhibi</a> with questions about the app or site. See the <a href="/privacy/">privacy policy</a> for data handling.</p></section>
+    </div>
+  </main>
+
+  <footer class="site-footer wrap">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="/privacy/">Privacy policy</a>
+      <a href="/terms/">Terms of use</a>
+      <a href="https://youssef.tn/#contact">Contact</a>
+    </nav>
+    <p>Fitness Tracker by <a href="https://youssef.tn/">Youssef Dhibi</a>.</p>
+  </footer>
+</body>
+</html>
