@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <title>Fitness Tracker | Offline workout log for iOS and Android</title>
+  <meta name="description" content="Log reps, weight, and timed sets, track personal bests, and revisit your workouts. Fitness Tracker works offline with no account.">
+  <link rel="canonical" href="https://fitness-tracker.dhibi.tn/">
+  <link rel="icon" href="assets/icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Fitness Tracker">
+  <meta property="og:title" content="Fitness Tracker | Offline workout log">
+  <meta property="og:description" content="Log reps, weight, and timed sets. See how your training changes over time.">
+  <meta property="og:url" content="https://fitness-tracker.dhibi.tn/">
+  <meta property="og:image" content="https://fitness-tracker.dhibi.tn/assets/social.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Fitness Tracker with the Progress screen in an iPhone 14 Pro frame over a sample workout chart.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>
+    try {
+      const theme = localStorage.getItem('fitness-tracker-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch {
+      // The system theme still works when browser storage is unavailable.
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="phone-frame.css">
+  <script src="script.js" defer></script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Fitness Tracker",
+      "url": "https://fitness-tracker.dhibi.tn/",
+      "image": "https://fitness-tracker.dhibi.tn/assets/social.jpg",
+      "description": "An offline workout log for recording reps, weights, and timed sets and tracking personal bests.",
+      "applicationCategory": "HealthApplication",
+      "operatingSystem": "iOS, iPadOS, Android",
+      "author": {
+        "@type": "Person",
+        "name": "Youssef Dhibi",
+        "url": "https://youssef.tn/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="github-icon" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.21.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03a9.6 9.6 0 0 1 5 0c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/>
+    </symbol>
+    <symbol id="sun-icon" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42m0-14.14-1.42 1.42m-11.3 11.3-1.42 1.42"/>
+      </g>
+    </symbol>
+    <symbol id="moon-icon" viewBox="0 0 24 24">
+      <path d="M20.9 13.34A9 9 0 0 1 10.66 3.1 9 9 0 1 0 20.9 13.34Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="system-icon" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <rect x="3" y="4" width="18" height="13" rx="2"/>
+        <path d="M12 17v3m-4 0h8"/>
+      </g>
+    </symbol>
+  </svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header wrap">
+    <a class="github-link" href="https://github.com/youssefsz" aria-label="Youssef Dhibi on GitHub">
+      <svg aria-hidden="true" width="18" height="18"><use href="#github-icon"></use></svg>
+      GitHub
+    </a>
+    <label class="theme-control" hidden>
+      <svg aria-hidden="true" width="18" height="18"><use href="#system-icon"></use></svg>
+      <select id="theme" aria-label="Appearance">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  </header>
+
+  <main id="main">
+    <div class="intro wrap">
+      <img class="app-icon" src="assets/icon.png" alt="" width="80" height="80">
+      <h1>Fitness Tracker</h1>
+      <p class="intro-copy">An offline workout log for reps, weights, and timed sets.</p>
+      <div class="stores" role="group" aria-label="App downloads">
+        <div class="store">
+          <button type="button" disabled aria-describedby="ios-status">
+            <img src="assets/app-store.svg" width="132" height="44" alt="Download on the App Store">
+          </button>
+          <span id="ios-status">Coming soon</span>
+        </div>
+        <div class="store">
+          <button type="button" disabled aria-describedby="android-status">
+            <img src="assets/google-play.png" width="564" height="168" alt="Get it on Google Play">
+          </button>
+          <span id="android-status">Coming soon</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="preview" aria-label="App preview">
+      <div class="preview-nav wrap">
+        <div class="feature-tabs" hidden aria-label="App screenshots">
+          <button type="button" id="tab-overview" aria-controls="feature-overview">Overview</button>
+          <button type="button" id="tab-progress" aria-controls="feature-progress" data-default>Progress</button>
+          <button type="button" id="tab-history" aria-controls="feature-history">History</button>
+          <button type="button" id="tab-log" aria-controls="feature-log">Log a set</button>
+        </div>
+      </div>
+
+      <div class="preview-stage">
+        <div class="chart-field">
+          <figure class="demo-chart wrap" aria-label="Sample squat workout history. Latest set on each training date, from 13 reps on March 13 to 34 reps on November 12.">
+            <figcaption>Bodyweight squats <span>Latest set · Demo data</span></figcaption>
+            <svg viewBox="0 0 1120 270" preserveAspectRatio="none" aria-hidden="true">
+              <path class="chart-grid" d="M0 20H1120 M0 135H1120 M0 250H1120"/>
+              <polyline class="chart-trace" points="0,175.2 9.2,163.8 13.8,169.5 32.1,169.5 55.1,186.8 64.3,169.5 73.4,163.8 105.6,158 110.2,146.5 119.3,169.5 128.5,140.8 137.7,163.8 142.3,146.5 160.7,169.5 174.4,152.2 183.6,158 192.8,146.5 202,146.5 215.7,146.5 234.1,146.5 238.7,135 247.9,140.8 257,152.2 266.2,158 270.8,135 289.2,146.5 303,152.2 344.3,117.8 362.6,129.2 367.2,140.8 385.6,129.2 394.8,129.2 399.3,129.2 417.7,129.2 491.1,123.5 495.7,117.8 504.9,112 514.1,135 523.3,106.2 527.9,112 546.2,106.2 560,94.8 569.2,100.5 578.4,106.2 587.5,112 619.7,106.2 624.3,100.5 633.4,94.8 642.6,71.8 651.8,77.5 656.4,100.5 674.8,94.8 688.5,89 706.9,123.5 716.1,94.8 729.8,94.8 748.2,112 752.8,94.8 771.1,94.8 780.3,89 784.9,77.5 803.3,66 817,71.8 826.2,71.8 844.6,54.5 858.4,83.2 876.7,89 881.3,66 890.5,83.2 908.9,48.8 913.4,83.2 945.6,48.8 954.8,54.5 963.9,66 973.1,77.5 986.9,71.8 1005.2,77.5 1009.8,71.8 1028.2,43 1037.4,54.5 1042,43 1060.3,54.5 1074.1,66 1083.3,48.8 1092.5,43 1101.6,54.5 1115.4,25.8 1120,54.5"/>
+              <circle class="chart-point" cx="0" cy="175.2" r="4"/>
+              <circle class="chart-point" cx="1120" cy="54.5" r="4"/>
+            </svg>
+            <div class="chart-dates" aria-hidden="true">
+              <span>Mar 13</span>
+              <span>Nov 12</span>
+            </div>
+          </figure>
+        </div>
+
+        <div class="feature-panels">
+          <figure class="feature-panel" id="feature-progress">
+            <div class="device device-iphone-14-pro">
+              <div class="device-frame">
+                <picture class="device-screen">
+                  <source media="(prefers-color-scheme: dark)" srcset="assets/progress-dark.webp" data-dark>
+                  <img src="assets/progress-light.webp" width="800" height="1739" alt="Progress screen showing the latest bodyweight squat result, the performance chart, and first, latest, and best results." fetchpriority="high" decoding="async">
+                </picture>
+              </div>
+              <div class="device-stripe" aria-hidden="true"></div>
+              <div class="device-header" aria-hidden="true"></div>
+              <div class="device-sensors" aria-hidden="true"></div>
+              <div class="device-btns" aria-hidden="true"></div>
+              <div class="device-power" aria-hidden="true"></div>
+              <div class="device-home" aria-hidden="true"></div>
+            </div>
+            <figcaption>Compare your latest set with your best.</figcaption>
+          </figure>
+
+          <figure class="feature-panel" id="feature-overview">
+            <div class="device device-iphone-14-pro">
+              <div class="device-frame">
+                <picture class="device-screen">
+                  <source media="(prefers-color-scheme: dark)" srcset="assets/overview-dark.webp" data-dark>
+                  <img src="assets/overview-light.webp" width="800" height="1739" alt="Overview screen with recent workouts, latest results, and personal bests." loading="lazy" decoding="async">
+                </picture>
+              </div>
+              <div class="device-stripe" aria-hidden="true"></div>
+              <div class="device-header" aria-hidden="true"></div>
+              <div class="device-sensors" aria-hidden="true"></div>
+              <div class="device-btns" aria-hidden="true"></div>
+              <div class="device-power" aria-hidden="true"></div>
+              <div class="device-home" aria-hidden="true"></div>
+            </div>
+            <figcaption>See your latest results at a glance.</figcaption>
+          </figure>
+
+          <figure class="feature-panel" id="feature-history">
+            <div class="device device-iphone-14-pro">
+              <div class="device-frame">
+                <picture class="device-screen">
+                  <source media="(prefers-color-scheme: dark)" srcset="assets/history-dark.webp" data-dark>
+                  <img src="assets/history-light.webp" width="800" height="1739" alt="History calendar with recorded dates marked and exercises listed for November 12." loading="lazy" decoding="async">
+                </picture>
+              </div>
+              <div class="device-stripe" aria-hidden="true"></div>
+              <div class="device-header" aria-hidden="true"></div>
+              <div class="device-sensors" aria-hidden="true"></div>
+              <div class="device-btns" aria-hidden="true"></div>
+              <div class="device-power" aria-hidden="true"></div>
+              <div class="device-home" aria-hidden="true"></div>
+            </div>
+            <figcaption>Find a past workout by date.</figcaption>
+          </figure>
+
+          <figure class="feature-panel" id="feature-log">
+            <div class="device device-iphone-14-pro">
+              <div class="device-frame">
+                <picture class="device-screen">
+                  <source media="(prefers-color-scheme: dark)" srcset="assets/logging-dark.webp" data-dark>
+                  <img src="assets/logging-light.webp" width="800" height="1739" alt="Exercise picker with recently used exercises and the option to create an exercise." loading="lazy" decoding="async">
+                </picture>
+              </div>
+              <div class="device-stripe" aria-hidden="true"></div>
+              <div class="device-header" aria-hidden="true"></div>
+              <div class="device-sensors" aria-hidden="true"></div>
+              <div class="device-btns" aria-hidden="true"></div>
+              <div class="device-power" aria-hidden="true"></div>
+              <div class="device-home" aria-hidden="true"></div>
+            </div>
+            <figcaption>Pick an exercise and log your sets.</figcaption>
+          </figure>
+        </div>
+      </div>
+      <p class="sample-note">Screenshots show sample workouts.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap">
+    <p>Your log stays on your device. Export your sets as CSV or back up your data as JSON.</p>
+    <p>Open-source release planned on <a href="https://github.com/youssefsz">GitHub</a>.</p>
+    <p class="credit">Created with love by <a href="https://youssef.tn/">Youssef Dhibi</a>.</p>
+  </footer>
+</body>
+</html>
