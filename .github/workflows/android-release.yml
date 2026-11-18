@@ -199,3 +199,18 @@ jobs:
           jq -e '.isDraft == true' <<< "$draft" >/dev/null
           complete_release <<< "$draft"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+
+      # Releases published with GITHUB_TOKEN do not trigger release-event workflows.
+      # Keep this outside the publish step so rerunning a completed release retries it.
+      - name: Refresh website downloads
+        shell: bash
+        env:
+          CLOUDFLARE_PAGES_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [[ -z "$CLOUDFLARE_PAGES_DEPLOY_HOOK" ]]; then
+            echo "::error::Set CLOUDFLARE_PAGES_DEPLOY_HOOK as described in landing-page/README.md."
+            exit 1
+          fi
+          curl --silent --show-error --fail --proto '=https' \
+            --connect-timeout 10 --max-time 30 --request POST \
+            --output /dev/null "$CLOUDFLARE_PAGES_DEPLOY_HOOK"
