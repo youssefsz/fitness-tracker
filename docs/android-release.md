@@ -16,6 +16,7 @@ In your repository settings, open **Secrets and variables → Actions** and crea
 | --- | --- |
 | `ANDROID_RELEASE_KEYSTORE_BASE64` | The PKCS#12 keystore encoded as Base64 |
 | `ANDROID_RELEASE_PASSWORD` | The keystore password |
+| `CLOUDFLARE_PAGES_DEPLOY_HOOK` | The production website deploy-hook URL, configured in the [website setup](../landing-page/README.md#configure-cloudflare-pages) |
 
 With the GitHub CLI, you can pipe secrets into `gh secret set NAME --repo OWNER/REPO` instead of copying them through the clipboard. Base64 represents binary data as text. Treat the encoded keystore as private. [GitHub Actions secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)
 
@@ -45,6 +46,8 @@ Find the APK at `build/app/outputs/flutter-apk/app-release.apk`. Use `apksigner 
 3. Open **Actions → Android release** to follow the build. When it finishes, check that the stable release is marked **Latest** and has the APK, `SHA256SUMS.txt`, and `android-update.json`. The workflow uploads all three to a draft and checks their upload status before publishing. Once a release has update metadata, the workflow requires a higher versionCode before publishing the next one.
 
 A rerun keeps a completed release and its assets. If a run finds an incomplete release or draft, inspect it in GitHub before retrying. If an existing debug install has workouts you want to keep, export a backup before uninstalling it to install the first signed release.
+
+After publication, the workflow requests a website deployment to refresh downloads. Check the Cloudflare Pages build result as well. If the hook request fails, the release remains published. Rerun the failed publish job to retry the website refresh. A failed website build leaves the previous site live.
 
 ## Verify the first release with the updater
 

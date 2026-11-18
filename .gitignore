@@ -64,3 +64,4 @@ app.*.map.json
 # Landing site dependencies
 /landing-page/node_modules/
 /landing-page/dist/
+.wrangler/

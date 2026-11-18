@@ -17,26 +17,32 @@ for (const rule of ['heading_open', 'heading_close']) {
   };
 }
 
-export async function listReleases() {
+export async function listReleases({ token } = {}) {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'Fitness-Tracker-Website',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const releases = [];
   for (let page = 1; ; page += 1) {
     const response = await fetch(
       `https://api.github.com/repos/${repository}/releases?per_page=100&page=${page}`,
       {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'Fitness-Tracker-Website',
-        },
+        headers,
         signal: AbortSignal.timeout(20_000),
       },
     );
     if (!response.ok) throw new Error(`GitHub Releases returned HTTP ${response.status}.`);
-    releases.push(...await response.json());
+    const items = await response.json();
+    if (!Array.isArray(items)) throw new Error('GitHub Releases did not return a release list.');
+    releases.push(...items);
     if (!response.headers.get('link')?.includes('rel="next"')) return releases;
   }
 }
 
 export function publishedApks(releases) {
+  if (!Array.isArray(releases)) throw new Error('Expected a GitHub release list.');
   return releases.flatMap((release) => {
     const tag = release.tag_name;
     const date = new Date(release.published_at);
@@ -46,6 +52,9 @@ export function publishedApks(releases) {
     const assets = release.assets.filter(({ state }) => state === 'uploaded');
     const download = assets.find(({ name }) => name === apk);
     if (!download) return [];
+    if (!Number.isFinite(download.size) || download.size <= 0) {
+      throw new Error(`Invalid APK size for ${tag}.`);
+    }
     return [{ tag, date, apk, download, checksum: assets.some(({ name }) => name === 'SHA256SUMS.txt'),
       prerelease: release.prerelease, notes: release.body ?? '' }];
   }).sort((a, b) => b.date - a.date);
@@ -65,8 +74,10 @@ export function latestStable(releases) {
 
 export function renderHome(template, releases) {
   const latest = latestStable(releases);
-  return latest ? template.replace('<!-- FITNESS_LATEST -->',
-    `<p class="download-version">Latest version ${escape(latest.tag)} · ${apkSize(latest)} MB</p>`) : template;
+  return latest ? template
+    .replace('href="/download"', `href="${apkUrl(latest)}"`)
+    .replace('<!-- FITNESS_LATEST -->',
+      `<p class="download-version">Latest version ${escape(latest.tag)} · ${apkSize(latest)} MB</p>`) : template;
 }
 
 function renderRelease(release, latest) {
