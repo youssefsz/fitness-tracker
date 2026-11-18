@@ -50,7 +50,7 @@ Use `fitness-backup` for a restorable snapshot. IDs are opaque strings up to 80 
 
 Settings accept `system`, `light`, or `dark` for appearance, and `clock` or `seconds` for duration display. A receipt item contains `fingerprint` as 64 lowercase hex characters and `importedAt` as a UTC timestamp.
 
-The app writes backup version 4 when an exercise tracks weight, has set tracking turned off, or has a zero result. `trackSets` is optional and defaults to `true` for older exercises. A `weight` or `weightAndReps` set stores grams in `value`. A `weightAndReps` set also requires `reps`. Weight goals use grams as their target.
+The app writes backup version 5 when a custom Overview exercise order is saved. It stores the ordered exercise IDs in `settings.overviewExerciseOrder`; versions 1–4 remain supported. The app writes version 4 when an exercise tracks weight, has set tracking turned off, or has a zero result. `trackSets` is optional and defaults to `true` for older exercises. A `weight` or `weightAndReps` set stores grams in `value`. A `weightAndReps` set also requires `reps`. Weight goals use grams as their target.
 
 The profile name and height may be null. Names use one line and up to 60 characters. Height is a whole number from 1 to 3,000 millimeters. Version 2 uses centimeters for display. Version 3 adds `heightUnit` with `cm` or `ftIn`. Version 4 also accepts it and defaults to `cm`. The body weight display unit is `kg` or `lb`. Weigh-ins use past or present calendar dates and whole numbers from 1 to 1,000,000 grams. Each date appears at most once. The profile photo stays on its original device.
 

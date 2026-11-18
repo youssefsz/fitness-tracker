@@ -180,6 +180,7 @@ void main() {
         appearance: appearance,
         duration: DurationStyle.clock,
         haptics: false,
+        overviewExerciseOrder: const [],
       ));
       try {
         await _pumpApp(tester, repo);
@@ -1492,6 +1493,7 @@ void main() {
           appearance: Appearance.dark,
           duration: DurationStyle.seconds,
           haptics: false,
+          overviewExerciseOrder: const [],
         ));
         await _pumpApp(tester, repo, width: 320, height: 640, scale: 2);
         await tester.tap(find.byTooltip('Profile'));
@@ -1731,6 +1733,7 @@ void main() {
           appearance: dark ? Appearance.dark : Appearance.light,
           duration: DurationStyle.clock,
           haptics: false,
+          overviewExerciseOrder: const [],
         ));
         try {
           await _pumpApp(

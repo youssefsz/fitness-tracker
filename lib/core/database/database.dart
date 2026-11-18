@@ -83,6 +83,7 @@ class AppPreferences extends Table {
   TextColumn get durationStyle =>
       text().check(durationStyle.isIn(['clock', 'seconds']))();
   BoolColumn get haptics => boolean()();
+  TextColumn get overviewExerciseOrder => text().nullable()();
   TextColumn get progressExerciseId => text().nullable().references(
     Exercises,
     #id,
@@ -156,44 +157,52 @@ class TrackerDatabase extends _$TrackerDatabase {
   TrackerDatabase(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => transaction(() => m.createAll()),
     onUpgrade: (m, from, to) async {
-      if (from < 1 || from > 5 || to != 6) {
+      if (from < 1 || from > 6 || to != 7) {
         throw StateError(
           'Unsupported database schema transition: $from → $to.',
         );
       }
-      if (from == 5) {
-        await m.addColumn(appPreferences, appPreferences.progressExerciseId);
-        return;
+      if (from < 6) {
+        if (from == 5) {
+          await m.addColumn(appPreferences, appPreferences.progressExerciseId);
+        } else {
+          // Rebuilding exercises must not cascade into existing goals or entries.
+          await customStatement('PRAGMA foreign_keys = OFF');
+          await transaction(() async {
+            if (from == 1) {
+              await m.createTable(localProfiles);
+              await m.createTable(weighIns);
+            } else if (from < 4) {
+              if (from == 2) {
+                await m.addColumn(localProfiles, localProfiles.avatarPreset);
+              }
+              await m.addColumn(localProfiles, localProfiles.heightUnit);
+            }
+            await m.alterTable(
+              TableMigration(exercises, newColumns: [exercises.trackSets]),
+            );
+            await m.alterTable(
+              TableMigration(exerciseSets, newColumns: [exerciseSets.reps]),
+            );
+            await m.addColumn(
+              appPreferences,
+              appPreferences.progressExerciseId,
+            );
+            if ((await customSelect(
+              'PRAGMA foreign_key_check',
+            ).get()).isNotEmpty) {
+              throw StateError('Database migration left invalid references.');
+            }
+          });
+        }
       }
-      // Rebuilding exercises must not cascade into existing goals or entries.
-      await customStatement('PRAGMA foreign_keys = OFF');
-      await transaction(() async {
-        if (from == 1) {
-          await m.createTable(localProfiles);
-          await m.createTable(weighIns);
-        } else if (from < 4) {
-          if (from == 2) {
-            await m.addColumn(localProfiles, localProfiles.avatarPreset);
-          }
-          await m.addColumn(localProfiles, localProfiles.heightUnit);
-        }
-        await m.alterTable(
-          TableMigration(exercises, newColumns: [exercises.trackSets]),
-        );
-        await m.alterTable(
-          TableMigration(exerciseSets, newColumns: [exerciseSets.reps]),
-        );
-        await m.addColumn(appPreferences, appPreferences.progressExerciseId);
-        if ((await customSelect('PRAGMA foreign_key_check').get()).isNotEmpty) {
-          throw StateError('Database migration left invalid references.');
-        }
-      });
+      await m.addColumn(appPreferences, appPreferences.overviewExerciseOrder);
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );

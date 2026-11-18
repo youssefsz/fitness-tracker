@@ -13,11 +13,12 @@ BackupData data({
   List<Entry> entries = const [],
   Map<String, DateTime> receipts = const {},
   BodyData? body,
+  Preferences preferences = defaultPreferences,
 }) => BackupData(
   exercises: exercises,
   entries: entries,
   goals: [],
-  preferences: defaultPreferences,
+  preferences: preferences,
   receipts: receipts,
   body: body,
 );
@@ -222,6 +223,65 @@ void main() {
     expect(reject.conflicts, hasLength(2));
     expect(reject.write.data.entries, isEmpty);
   });
+
+  test(
+    'custom exercise order survives backup replace and merges new exercises',
+    () {
+      final push = exercise('push', 'Push-ups', Measurement.repetitions);
+      final plank = exercise('plank', 'Plank', Measurement.duration);
+      final squat = exercise('squat', 'Squat', Measurement.repetitions);
+      final custom = (
+        appearance: Appearance.dark,
+        duration: DurationStyle.seconds,
+        haptics: false,
+        overviewExerciseOrder: ['plank', 'push'],
+      );
+      final local = data(exercises: [push, plank], preferences: custom);
+      final encoded = encodeBackup(local, time);
+      expect(jsonDecode(encoded)['schemaVersion'], exerciseOrderBackupVersion);
+      final decoded = decodeBackup(encoded, today);
+      expect(decoded.preferences.overviewExerciseOrder, ['plank', 'push']);
+      expect(
+        planBackup(
+          data(),
+          decoded,
+          RestoreMode.replace,
+        ).write.data.preferences.overviewExerciseOrder,
+        ['plank', 'push'],
+      );
+
+      final incoming = data(
+        exercises: [squat, push],
+        preferences: (
+          appearance: Appearance.system,
+          duration: DurationStyle.clock,
+          haptics: true,
+          overviewExerciseOrder: ['squat', 'push'],
+        ),
+      );
+      final merged = planBackup(local, incoming, RestoreMode.merge);
+      expect(merged.write.data.preferences.overviewExerciseOrder, [
+        'plank',
+        'push',
+        'squat',
+      ]);
+      expect(
+        planBackup(
+          data(exercises: [push]),
+          incoming,
+          RestoreMode.merge,
+        ).write.data.preferences.overviewExerciseOrder,
+        isEmpty,
+      );
+
+      final malformed = jsonDecode(encoded) as Map<String, dynamic>;
+      malformed['settings']['overviewExerciseOrder'] = ['plank', 'missing'];
+      expect(
+        () => decodeBackup(jsonEncode(malformed), today),
+        throwsFormatException,
+      );
+    },
+  );
 
   test('backup rejects invalid references, sparse positions and unsupported versions', () {
     final x = exercise('push', 'Push-ups', Measurement.repetitions);

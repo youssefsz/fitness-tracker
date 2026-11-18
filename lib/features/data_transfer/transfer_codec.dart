@@ -11,6 +11,7 @@ const transferVersion = 1;
 const backupVersion = 2;
 const heightUnitBackupVersion = 3;
 const activityBackupVersion = 4;
+const exerciseOrderBackupVersion = 5;
 const activityImportVersion = 2;
 const legacyMeasurements = [Measurement.repetitions, Measurement.duration];
 const maxTransferBytes = 20 * 1024 * 1024;
@@ -200,13 +201,16 @@ _Field _root(
     _ => null,
   };
   final isBackup = format == backupFormat;
-  final latest = isBackup ? activityBackupVersion : activityImportVersion;
+  final latest = isBackup ? exerciseOrderBackupVersion : activityImportVersion;
   if (version != null && (version < transferVersion || version > latest)) {
     throw FormatException(
       'Version $version is not supported. This app reads versions 1 through $latest.',
     );
   }
-  final optionalBody = isBackup && version == activityBackupVersion;
+  final optionalBody =
+      isBackup &&
+      (version == activityBackupVersion ||
+          version == exerciseOrderBackupVersion);
   final requiredBody =
       isBackup &&
       (version == backupVersion || version == heightUnitBackupVersion);
@@ -336,6 +340,8 @@ Map<String, Object?> _backupJson(BackupData data) => {
     'appearance': data.preferences.appearance.name,
     'duration': data.preferences.duration.name,
     'haptics': data.preferences.haptics,
+    if (data.preferences.overviewExerciseOrder.isNotEmpty)
+      'overviewExerciseOrder': data.preferences.overviewExerciseOrder,
   },
   'importReceipts': [
     for (final id in (data.receipts.keys.toList()..sort()))
@@ -370,6 +376,9 @@ String encodeBackup(BackupData data, DateTime exportedAt) => _pretty.convert({
 });
 
 int _backupVersion(BackupData data) {
+  if (data.preferences.overviewExerciseOrder.isNotEmpty) {
+    return exerciseOrderBackupVersion;
+  }
   if (data.exercises.any((e) => e.measurement.usesWeight || !e.trackSets) ||
       data.entries.any((e) => e.sets.any((s) => s.value == 0))) {
     return activityBackupVersion;
@@ -396,7 +405,8 @@ BackupData decodeBackup(String text, CalendarDay today) {
     backupFields: ['profile', 'weighIns'],
   );
   root.get('exportedAt').timestamp();
-  final extended = root.get('schemaVersion').value == activityBackupVersion;
+  final version = root.get('schemaVersion').value as int;
+  final extended = version >= activityBackupVersion;
   final measurements = <String, Measurement>{};
   final names = <String>{};
   final exercises = <Exercise>[];
@@ -532,7 +542,37 @@ BackupData decodeBackup(String text, CalendarDay today) {
     );
   }
   final settings = root.get('settings')
-    ..object(['appearance', 'duration', 'haptics']);
+    ..object(
+      ['appearance', 'duration', 'haptics'],
+      optional: version == exerciseOrderBackupVersion
+          ? ['overviewExerciseOrder']
+          : const [],
+    );
+  final overviewExerciseOrder = <String>[];
+  if (version == exerciseOrderBackupVersion) {
+    final ids = settings
+        .get('overviewExerciseOrder')
+        .list(limit: maxTransferExercises);
+    final seen = <String>{};
+    for (final field in ids) {
+      final id = field.identifier();
+      if (!measurements.containsKey(id)) {
+        field.fail('Unknown exercise ID.');
+      }
+      if (!seen.add(id)) field.fail('Duplicate exercise ID.');
+      overviewExerciseOrder.add(id);
+    }
+    if (overviewExerciseOrder.isEmpty) {
+      settings
+          .get('overviewExerciseOrder')
+          .fail('Choose a custom exercise order before exporting it.');
+    }
+    if (seen.length != measurements.length) {
+      settings
+          .get('overviewExerciseOrder')
+          .fail('Include every exercise in the custom order.');
+    }
+  }
   final receipts = <String, DateTime>{};
   for (final row
       in root.get('importReceipts').list(limit: maxTransferReceipts)) {
@@ -558,20 +598,21 @@ BackupData decodeBackup(String text, CalendarDay today) {
       appearance: settings.get('appearance').choice(Appearance.values),
       duration: settings.get('duration').choice(DurationStyle.values),
       haptics: settings.get('haptics').boolean(),
+      overviewExerciseOrder: overviewExerciseOrder,
     ),
   );
 }
 
 BodyData _decodeBody(_Field root, CalendarDay today) {
   final profile = root.get('profile');
-  final version = root.get('schemaVersion').value;
+  final version = root.get('schemaVersion').value as int;
   final needsHeightUnit = version == heightUnitBackupVersion;
   final keys = profile.object([
     'displayName',
     'heightMillimeters',
     'weightUnit',
     if (needsHeightUnit) 'heightUnit',
-  ], optional: version == activityBackupVersion ? ['heightUnit'] : const []);
+  ], optional: version >= activityBackupVersion ? ['heightUnit'] : const []);
   final nameField = profile.get('displayName');
   final name = nameField.value == null
       ? null

@@ -107,12 +107,14 @@ typedef Preferences = ({
   Appearance appearance,
   DurationStyle duration,
   bool haptics,
+  List<String> overviewExerciseOrder,
 });
 
 const defaultPreferences = (
   appearance: Appearance.system,
   duration: DurationStyle.clock,
   haptics: true,
+  overviewExerciseOrder: <String>[],
 );
 
 String clockValue(int seconds) =>

@@ -1771,6 +1771,17 @@ class $AppPreferencesTable extends AppPreferences
       'CHECK ("haptics" IN (0, 1))',
     ),
   );
+  static const VerificationMeta _overviewExerciseOrderMeta =
+      const VerificationMeta('overviewExerciseOrder');
+  @override
+  late final GeneratedColumn<String> overviewExerciseOrder =
+      GeneratedColumn<String>(
+        'overview_exercise_order',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _progressExerciseIdMeta =
       const VerificationMeta('progressExerciseId');
   @override
@@ -1791,6 +1802,7 @@ class $AppPreferencesTable extends AppPreferences
     appearance,
     durationStyle,
     haptics,
+    overviewExerciseOrder,
     progressExerciseId,
   ];
   @override
@@ -1835,6 +1847,15 @@ class $AppPreferencesTable extends AppPreferences
     } else if (isInserting) {
       context.missing(_hapticsMeta);
     }
+    if (data.containsKey('overview_exercise_order')) {
+      context.handle(
+        _overviewExerciseOrderMeta,
+        overviewExerciseOrder.isAcceptableOrUnknown(
+          data['overview_exercise_order']!,
+          _overviewExerciseOrderMeta,
+        ),
+      );
+    }
     if (data.containsKey('progress_exercise_id')) {
       context.handle(
         _progressExerciseIdMeta,
@@ -1869,6 +1890,10 @@ class $AppPreferencesTable extends AppPreferences
         DriftSqlType.bool,
         data['${effectivePrefix}haptics'],
       )!,
+      overviewExerciseOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}overview_exercise_order'],
+      ),
       progressExerciseId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}progress_exercise_id'],
@@ -1887,12 +1912,14 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
   final String appearance;
   final String durationStyle;
   final bool haptics;
+  final String? overviewExerciseOrder;
   final String? progressExerciseId;
   const AppPreference({
     required this.id,
     required this.appearance,
     required this.durationStyle,
     required this.haptics,
+    this.overviewExerciseOrder,
     this.progressExerciseId,
   });
   @override
@@ -1902,6 +1929,9 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
     map['appearance'] = Variable<String>(appearance);
     map['duration_style'] = Variable<String>(durationStyle);
     map['haptics'] = Variable<bool>(haptics);
+    if (!nullToAbsent || overviewExerciseOrder != null) {
+      map['overview_exercise_order'] = Variable<String>(overviewExerciseOrder);
+    }
     if (!nullToAbsent || progressExerciseId != null) {
       map['progress_exercise_id'] = Variable<String>(progressExerciseId);
     }
@@ -1914,6 +1944,9 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
       appearance: Value(appearance),
       durationStyle: Value(durationStyle),
       haptics: Value(haptics),
+      overviewExerciseOrder: overviewExerciseOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(overviewExerciseOrder),
       progressExerciseId: progressExerciseId == null && nullToAbsent
           ? const Value.absent()
           : Value(progressExerciseId),
@@ -1930,6 +1963,9 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
       appearance: serializer.fromJson<String>(json['appearance']),
       durationStyle: serializer.fromJson<String>(json['durationStyle']),
       haptics: serializer.fromJson<bool>(json['haptics']),
+      overviewExerciseOrder: serializer.fromJson<String?>(
+        json['overviewExerciseOrder'],
+      ),
       progressExerciseId: serializer.fromJson<String?>(
         json['progressExerciseId'],
       ),
@@ -1943,6 +1979,9 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
       'appearance': serializer.toJson<String>(appearance),
       'durationStyle': serializer.toJson<String>(durationStyle),
       'haptics': serializer.toJson<bool>(haptics),
+      'overviewExerciseOrder': serializer.toJson<String?>(
+        overviewExerciseOrder,
+      ),
       'progressExerciseId': serializer.toJson<String?>(progressExerciseId),
     };
   }
@@ -1952,12 +1991,16 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
     String? appearance,
     String? durationStyle,
     bool? haptics,
+    Value<String?> overviewExerciseOrder = const Value.absent(),
     Value<String?> progressExerciseId = const Value.absent(),
   }) => AppPreference(
     id: id ?? this.id,
     appearance: appearance ?? this.appearance,
     durationStyle: durationStyle ?? this.durationStyle,
     haptics: haptics ?? this.haptics,
+    overviewExerciseOrder: overviewExerciseOrder.present
+        ? overviewExerciseOrder.value
+        : this.overviewExerciseOrder,
     progressExerciseId: progressExerciseId.present
         ? progressExerciseId.value
         : this.progressExerciseId,
@@ -1972,6 +2015,9 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
           ? data.durationStyle.value
           : this.durationStyle,
       haptics: data.haptics.present ? data.haptics.value : this.haptics,
+      overviewExerciseOrder: data.overviewExerciseOrder.present
+          ? data.overviewExerciseOrder.value
+          : this.overviewExerciseOrder,
       progressExerciseId: data.progressExerciseId.present
           ? data.progressExerciseId.value
           : this.progressExerciseId,
@@ -1985,14 +2031,21 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
           ..write('appearance: $appearance, ')
           ..write('durationStyle: $durationStyle, ')
           ..write('haptics: $haptics, ')
+          ..write('overviewExerciseOrder: $overviewExerciseOrder, ')
           ..write('progressExerciseId: $progressExerciseId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, appearance, durationStyle, haptics, progressExerciseId);
+  int get hashCode => Object.hash(
+    id,
+    appearance,
+    durationStyle,
+    haptics,
+    overviewExerciseOrder,
+    progressExerciseId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2001,6 +2054,7 @@ class AppPreference extends DataClass implements Insertable<AppPreference> {
           other.appearance == this.appearance &&
           other.durationStyle == this.durationStyle &&
           other.haptics == this.haptics &&
+          other.overviewExerciseOrder == this.overviewExerciseOrder &&
           other.progressExerciseId == this.progressExerciseId);
 }
 
@@ -2009,12 +2063,14 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
   final Value<String> appearance;
   final Value<String> durationStyle;
   final Value<bool> haptics;
+  final Value<String?> overviewExerciseOrder;
   final Value<String?> progressExerciseId;
   const AppPreferencesCompanion({
     this.id = const Value.absent(),
     this.appearance = const Value.absent(),
     this.durationStyle = const Value.absent(),
     this.haptics = const Value.absent(),
+    this.overviewExerciseOrder = const Value.absent(),
     this.progressExerciseId = const Value.absent(),
   });
   AppPreferencesCompanion.insert({
@@ -2022,6 +2078,7 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
     required String appearance,
     required String durationStyle,
     required bool haptics,
+    this.overviewExerciseOrder = const Value.absent(),
     this.progressExerciseId = const Value.absent(),
   }) : appearance = Value(appearance),
        durationStyle = Value(durationStyle),
@@ -2031,6 +2088,7 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
     Expression<String>? appearance,
     Expression<String>? durationStyle,
     Expression<bool>? haptics,
+    Expression<String>? overviewExerciseOrder,
     Expression<String>? progressExerciseId,
   }) {
     return RawValuesInsertable({
@@ -2038,6 +2096,8 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
       if (appearance != null) 'appearance': appearance,
       if (durationStyle != null) 'duration_style': durationStyle,
       if (haptics != null) 'haptics': haptics,
+      if (overviewExerciseOrder != null)
+        'overview_exercise_order': overviewExerciseOrder,
       if (progressExerciseId != null)
         'progress_exercise_id': progressExerciseId,
     });
@@ -2048,6 +2108,7 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
     Value<String>? appearance,
     Value<String>? durationStyle,
     Value<bool>? haptics,
+    Value<String?>? overviewExerciseOrder,
     Value<String?>? progressExerciseId,
   }) {
     return AppPreferencesCompanion(
@@ -2055,6 +2116,8 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
       appearance: appearance ?? this.appearance,
       durationStyle: durationStyle ?? this.durationStyle,
       haptics: haptics ?? this.haptics,
+      overviewExerciseOrder:
+          overviewExerciseOrder ?? this.overviewExerciseOrder,
       progressExerciseId: progressExerciseId ?? this.progressExerciseId,
     );
   }
@@ -2074,6 +2137,11 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
     if (haptics.present) {
       map['haptics'] = Variable<bool>(haptics.value);
     }
+    if (overviewExerciseOrder.present) {
+      map['overview_exercise_order'] = Variable<String>(
+        overviewExerciseOrder.value,
+      );
+    }
     if (progressExerciseId.present) {
       map['progress_exercise_id'] = Variable<String>(progressExerciseId.value);
     }
@@ -2087,6 +2155,7 @@ class AppPreferencesCompanion extends UpdateCompanion<AppPreference> {
           ..write('appearance: $appearance, ')
           ..write('durationStyle: $durationStyle, ')
           ..write('haptics: $haptics, ')
+          ..write('overviewExerciseOrder: $overviewExerciseOrder, ')
           ..write('progressExerciseId: $progressExerciseId')
           ..write(')'))
         .toString();
@@ -4693,6 +4762,7 @@ typedef $$AppPreferencesTableCreateCompanionBuilder =
       required String appearance,
       required String durationStyle,
       required bool haptics,
+      Value<String?> overviewExerciseOrder,
       Value<String?> progressExerciseId,
     });
 typedef $$AppPreferencesTableUpdateCompanionBuilder =
@@ -4701,6 +4771,7 @@ typedef $$AppPreferencesTableUpdateCompanionBuilder =
       Value<String> appearance,
       Value<String> durationStyle,
       Value<bool> haptics,
+      Value<String?> overviewExerciseOrder,
       Value<String?> progressExerciseId,
     });
 
@@ -4761,6 +4832,11 @@ class $$AppPreferencesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get overviewExerciseOrder => $composableBuilder(
+    column: $table.overviewExerciseOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ExercisesTableFilterComposer get progressExerciseId {
     final $$ExercisesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -4814,6 +4890,11 @@ class $$AppPreferencesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get overviewExerciseOrder => $composableBuilder(
+    column: $table.overviewExerciseOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ExercisesTableOrderingComposer get progressExerciseId {
     final $$ExercisesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -4862,6 +4943,11 @@ class $$AppPreferencesTableAnnotationComposer
 
   GeneratedColumn<bool> get haptics =>
       $composableBuilder(column: $table.haptics, builder: (column) => column);
+
+  GeneratedColumn<String> get overviewExerciseOrder => $composableBuilder(
+    column: $table.overviewExerciseOrder,
+    builder: (column) => column,
+  );
 
   $$ExercisesTableAnnotationComposer get progressExerciseId {
     final $$ExercisesTableAnnotationComposer composer = $composerBuilder(
@@ -4921,12 +5007,14 @@ class $$AppPreferencesTableTableManager
                 Value<String> appearance = const Value.absent(),
                 Value<String> durationStyle = const Value.absent(),
                 Value<bool> haptics = const Value.absent(),
+                Value<String?> overviewExerciseOrder = const Value.absent(),
                 Value<String?> progressExerciseId = const Value.absent(),
               }) => AppPreferencesCompanion(
                 id: id,
                 appearance: appearance,
                 durationStyle: durationStyle,
                 haptics: haptics,
+                overviewExerciseOrder: overviewExerciseOrder,
                 progressExerciseId: progressExerciseId,
               ),
           createCompanionCallback:
@@ -4935,12 +5023,14 @@ class $$AppPreferencesTableTableManager
                 required String appearance,
                 required String durationStyle,
                 required bool haptics,
+                Value<String?> overviewExerciseOrder = const Value.absent(),
                 Value<String?> progressExerciseId = const Value.absent(),
               }) => AppPreferencesCompanion.insert(
                 id: id,
                 appearance: appearance,
                 durationStyle: durationStyle,
                 haptics: haptics,
+                overviewExerciseOrder: overviewExerciseOrder,
                 progressExerciseId: progressExerciseId,
               ),
           withReferenceMapper: (p0) => p0
