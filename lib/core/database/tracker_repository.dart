@@ -1113,7 +1113,7 @@ class TrackerRepository {
         ]);
       }
     });
-    if (write.replace) await savePreferences(write.data.preferences);
+    await savePreferences(write.data.preferences);
     if (write.data.body case final body?) {
       await saveProfileDetails(body.profile);
     }

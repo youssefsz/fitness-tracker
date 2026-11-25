@@ -14,6 +14,7 @@ import '../../features/data_transfer/transfer_codec.dart';
 import '../../shared/domain/training.dart';
 
 abstract interface class FeedbackService {
+  Future<void> dragStarted();
   Future<void> selection();
   Future<void> saved();
 }
@@ -91,6 +92,9 @@ class DeviceProfilePhotos implements ProfilePhotos {
 
 class DeviceFeedback implements FeedbackService {
   const DeviceFeedback();
+
+  @override
+  Future<void> dragStarted() => HapticFeedback.lightImpact();
 
   @override
   Future<void> selection() => HapticFeedback.selectionClick();

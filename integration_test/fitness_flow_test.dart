@@ -6,6 +6,7 @@ import 'package:fitness_tracker/core/database/database.dart'
     show TrackerDatabase;
 import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
+import 'package:fitness_tracker/features/data_transfer/import_plan.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart';
 import 'package:fitness_tracker/features/profile/edit_profile_page.dart';
 import 'package:fitness_tracker/features/profile/profile_avatar.dart';
@@ -285,6 +286,123 @@ void main() {
       } catch (_) {
         await capture('log-failure');
         rethrow;
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _settle(tester);
+        await repo.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
+    'merge a backup with custom ordering, reopen and restore its export',
+    (tester) async {
+      tester.testTextInput.register();
+      addTearDown(tester.testTextInput.unregister);
+      final directory = await Directory.systemTemp.createTemp(
+        'v-backup-merge-',
+      );
+      final database = File(p.join(directory.path, 'fitness.sqlite'));
+      TrackerRepository open() => TrackerRepository(
+        TrackerDatabase(NativeDatabase.createInBackground(database)),
+        now: () => _now,
+      );
+      var repo = open();
+      try {
+        final push = await repo.createExercise(
+          'Push-ups',
+          Measurement.repetitions,
+        );
+        final plank = await repo.createExercise('Plank', Measurement.duration);
+        await repo.log([
+          EntryDraft(
+            exerciseId: push.id,
+            day: _today,
+            sets: [(id: null, value: 12, reps: null)],
+          ),
+          EntryDraft(
+            exerciseId: plank.id,
+            day: _today,
+            sets: [(id: null, value: 60, reps: null)],
+          ),
+        ]);
+        await repo.savePreferences((
+          appearance: Appearance.light,
+          duration: DurationStyle.seconds,
+          haptics: false,
+          overviewExerciseOrder: [plank.id, push.id],
+        ));
+        final timestamp = _now.toUtc();
+        final source = BackupData(
+          exercises: [
+            Exercise(
+              id: 'backup-squats',
+              name: 'Squats',
+              measurement: Measurement.repetitions,
+              archived: false,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            ),
+          ],
+          entries: [
+            Entry(
+              id: 'backup-entry',
+              exerciseId: 'backup-squats',
+              day: _today,
+              notes: null,
+              order: 1,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+              sets: [(id: 'backup-set', position: 0, value: 20, reps: null)],
+            ),
+          ],
+          goals: [],
+          preferences: defaultPreferences,
+          receipts: {},
+        );
+        await _present(tester, repo);
+        await _tooltip(tester, 'Profile');
+        await _tap(tester, 'Your data');
+        await _tap(tester, 'Import backup');
+        await tester.enterText(
+          find.byType(TextField).first,
+          encodeBackup(source, _now),
+        );
+        await _tap(tester, 'Validate and preview');
+        await _tap(tester, 'Merge backup');
+        await _waitFor(tester, _visible('Backup merged.'));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _settle(tester);
+        await repo.close();
+        repo = open();
+        final merged = await repo.snapshot();
+        expect(merged.preferences.overviewExerciseOrder, [
+          plank.id,
+          push.id,
+          'backup-squats',
+        ]);
+        expect(merged.preferences.appearance, Appearance.light);
+        expect(merged.preferences.duration, DurationStyle.seconds);
+        expect(merged.preferences.haptics, isFalse);
+        final exported = decodeBackup(encodeBackup(merged, _now), _today);
+        await repo.restore(
+          (current) => planBackup(current, exported, RestoreMode.replace).write,
+          recover: (_) async {},
+        );
+        expect(
+          backupFingerprint(await repo.snapshot()),
+          backupFingerprint(merged),
+        );
+        await _present(tester, repo);
+        await _waitFor(tester, _visible('Squats'));
+        final plankY = tester.getTopLeft(_visible('Plank').first).dy;
+        final pushY = tester.getTopLeft(_visible('Push-ups').first).dy;
+        final squatY = tester.getTopLeft(_visible('Squats').first).dy;
+        expect(plankY, lessThan(pushY));
+        expect(pushY, lessThan(squatY));
+        expect(tester.takeException(), isNull);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         await _settle(tester);

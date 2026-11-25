@@ -184,6 +184,10 @@ class TrainingActions {
     if (hapticsEnabled()) unawaited(_feedback(feedback.selection));
   }
 
+  void startDrag() {
+    if (hapticsEnabled()) unawaited(_feedback(feedback.dragStarted));
+  }
+
   void saved() {
     if (hapticsEnabled()) unawaited(_feedback(feedback.saved));
   }

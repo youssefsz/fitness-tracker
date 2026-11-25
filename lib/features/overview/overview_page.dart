@@ -1,6 +1,6 @@
-import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/providers.dart';
@@ -10,93 +10,20 @@ import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
+import 'exercise_order_sheet.dart';
 import '../history/entry_row.dart';
 import '../logging/log_page.dart';
 import '../profile/profile_avatar.dart';
 import '../progress/performance_chart.dart';
 import '../update/android_update_host.dart';
 
-class OverviewPage extends ConsumerStatefulWidget {
+enum _ExerciseListAction { reorder, library }
+
+class OverviewPage extends ConsumerWidget {
   const OverviewPage({super.key});
 
   @override
-  ConsumerState<OverviewPage> createState() => _OverviewPageState();
-}
-
-class _OverviewPageState extends ConsumerState<OverviewPage> {
-  bool _reordering = false;
-  bool _savingOrder = false;
-  List<String> _draftOrder = [];
-
-  void _startReordering(List<String> ids) {
-    setState(() {
-      _reordering = true;
-      _draftOrder = List.of(ids);
-    });
-  }
-
-  void _cancelReordering() => setState(() {
-    _reordering = false;
-    _draftOrder = [];
-  });
-
-  List<String> _currentDraft(List<String> ids) => [
-    ..._draftOrder.where(ids.contains),
-    ...ids.where((id) => !_draftOrder.contains(id)),
-  ];
-
-  void _move(int from, int to, List<String> ids) {
-    final order = _reordering ? _currentDraft(ids) : ids;
-    if (to < 0 || to >= order.length || from == to) return;
-    setState(() {
-      final id = order.removeAt(from);
-      order.insert(to, id);
-      _draftOrder = order;
-    });
-  }
-
-  Future<void> _saveOrder(List<String> ids) async {
-    setState(() => _savingOrder = true);
-    try {
-      await ref
-          .read(repositoryProvider)
-          .saveOverviewExerciseOrder(_currentDraft(ids));
-      if (mounted) {
-        setState(() {
-          _savingOrder = false;
-          _reordering = false;
-          _draftOrder = [];
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() => _savingOrder = false);
-        announce(context, describeError(error));
-      }
-    }
-  }
-
-  Future<void> _resetOrder() async {
-    setState(() => _savingOrder = true);
-    try {
-      await ref.read(repositoryProvider).resetOverviewExerciseOrder();
-      if (mounted) {
-        setState(() {
-          _savingOrder = false;
-          _reordering = false;
-          _draftOrder = [];
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() => _savingOrder = false);
-        announce(context, describeError(error));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(catalogProvider);
     final value = ref.watch(overviewProvider);
     final overview = value.value;
@@ -151,36 +78,9 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
               for (final row in items)
                 if (!row.exercise.archived) row.exercise.id: row.exercise,
             };
-            final storedOrder = preferences?.overviewExerciseOrder ?? const [];
-            final storedIndex = {
-              for (var i = 0; i < storedOrder.length; i++) storedOrder[i]: i,
-            };
             final summaries = data.exercises
                 .where((summary) => map.containsKey(summary.exerciseId))
                 .toList();
-            if (storedIndex.isNotEmpty) {
-              summaries.sort((a, b) {
-                final ai = storedIndex[a.exerciseId] ?? storedOrder.length;
-                final bi = storedIndex[b.exerciseId] ?? storedOrder.length;
-                if (ai != bi) return ai.compareTo(bi);
-                final byDate = b.latestDay.compareTo(a.latestDay);
-                return byDate != 0
-                    ? byDate
-                    : a.exerciseId.compareTo(b.exerciseId);
-              });
-            }
-            final displayedSummaries = _reordering
-                ? _currentDraft(
-                        summaries.map((summary) => summary.exerciseId).toList(),
-                      )
-                      .map(
-                        (id) => summaries.firstWhere(
-                          (summary) => summary.exerciseId == id,
-                        ),
-                      )
-                      .toList()
-                : summaries;
-            final ids = summaries.map((summary) => summary.exerciseId).toList();
             final recentByDay = <CalendarDay, List<Entry>>{};
             for (final entry in data.recent) {
               if (map.containsKey(entry.exerciseId)) {
@@ -193,97 +93,59 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                 children: [
                   SectionTitle(
                     'Your exercises',
-                    action: _reordering
-                        ? Wrap(
-                            alignment: WrapAlignment.end,
-                            spacing: 4,
-                            children: [
-                              QuietButton(
-                                'Cancel',
-                                _savingOrder ? null : _cancelReordering,
-                              ),
-                              TextButton(
-                                onPressed: _savingOrder
-                                    ? null
-                                    : () => _saveOrder(ids),
-                                child: const Text('Done'),
-                              ),
-                            ],
-                          )
-                        : Wrap(
-                            alignment: WrapAlignment.end,
-                            spacing: 4,
-                            children: [
-                              if (storedIndex.isNotEmpty)
-                                QuietButton('Reset to recent', _resetOrder),
-                              if (summaries.length > 1)
-                                QuietButton(
-                                  'Reorder',
-                                  () => _startReordering(ids),
-                                ),
-                              QuietButton(
-                                'Manage',
-                                () => context.push('/exercises'),
-                              ),
-                            ],
-                          ),
-                  ),
-                  if (_reordering)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: Space.xs),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Drag the handle to change the order.',
-                              style: context.type.bodySmall?.copyWith(
-                                color: context.colors.muted,
-                              ),
+                    action: PopupMenuButton<_ExerciseListAction>(
+                      tooltip: 'Exercise options',
+                      icon: const Icon(LucideIcons.ellipsis, size: 22),
+                      onSelected: (choice) async {
+                        switch (choice) {
+                          case _ExerciseListAction.reorder:
+                            await showExerciseOrderSheet(
+                              context,
+                              items: [
+                                for (final summary in summaries)
+                                  (
+                                    exercise: map[summary.exerciseId]!,
+                                    summary: summary,
+                                  ),
+                              ],
+                              style: style,
+                              customOrder:
+                                  preferences
+                                      ?.overviewExerciseOrder
+                                      .isNotEmpty ??
+                                  false,
+                            );
+                          case _ExerciseListAction.library:
+                            if (context.mounted) context.push('/exercises');
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        if (summaries.length > 1)
+                          const PopupMenuItem(
+                            value: _ExerciseListAction.reorder,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(LucideIcons.arrowDownUp, size: 20),
+                              title: Text('Reorder exercises'),
                             ),
                           ),
-                          if (storedIndex.isNotEmpty)
-                            QuietButton('Reset to recent', _resetOrder),
-                        ],
-                      ),
-                    ),
-                  if (_reordering)
-                    ReorderableListView(
-                      primary: false,
-                      shrinkWrap: true,
-                      buildDefaultDragHandles: false,
-                      onReorderItem: (oldIndex, newIndex) =>
-                          _move(oldIndex, newIndex, ids),
-                      children: [
-                        for (
-                          var index = 0;
-                          index < displayedSummaries.length;
-                          index++
-                        )
-                          _ExerciseSummary(
-                            key: ValueKey(displayedSummaries[index].exerciseId),
-                            exercise:
-                                map[displayedSummaries[index].exerciseId]!,
-                            summary: displayedSummaries[index],
-                            style: style,
-                            reordering: true,
-                            index: index,
-                            onMoveUp: index == 0
-                                ? null
-                                : () => _move(index, index - 1, ids),
-                            onMoveDown: index == displayedSummaries.length - 1
-                                ? null
-                                : () => _move(index, index + 1, ids),
+                        const PopupMenuItem(
+                          value: _ExerciseListAction.library,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(LucideIcons.dumbbell, size: 20),
+                            title: Text('Exercise library'),
                           ),
+                        ),
                       ],
                     ),
-                  if (!_reordering)
-                    for (final summary in displayedSummaries)
-                      if (map[summary.exerciseId] case final exercise?)
-                        _ExerciseSummary(
-                          exercise: exercise,
-                          summary: summary,
-                          style: style,
-                        ),
+                  ),
+                  for (final summary in summaries)
+                    _ExerciseSummary(
+                      exercise: map[summary.exerciseId]!,
+                      summary: summary,
+                      style: style,
+                    ),
                 ],
               ),
               side: Column(
@@ -429,21 +291,13 @@ class _FirstResult extends StatelessWidget {
 
 class _ExerciseSummary extends StatelessWidget {
   const _ExerciseSummary({
-    super.key,
     required this.exercise,
     required this.summary,
     required this.style,
-    this.reordering = false,
-    this.index = 0,
-    this.onMoveUp,
-    this.onMoveDown,
   });
   final Exercise exercise;
   final OverviewExercise summary;
   final DurationStyle style;
-  final bool reordering;
-  final int index;
-  final VoidCallback? onMoveUp, onMoveDown;
 
   @override
   Widget build(BuildContext context) {
@@ -452,150 +306,97 @@ class _ExerciseSummary extends StatelessWidget {
     final percent = summary.first == 0
         ? null
         : (change / summary.first * 100).round();
-    final actions = <CustomSemanticsAction, VoidCallback>{};
-    if (onMoveUp case final moveUp?) {
-      actions[CustomSemanticsAction(label: 'Move up')] = moveUp;
-    }
-    if (onMoveDown case final moveDown?) {
-      actions[CustomSemanticsAction(label: 'Move down')] = moveDown;
-    }
-    return Semantics(
-      customSemanticsActions: reordering ? actions : null,
-      child: Column(
-        children: [
-          Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              onTap: reordering
-                  ? null
-                  : () => context.push('/exercise/${exercise.id}'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: LayoutBuilder(
-                  builder: (context, size) {
-                    final identity = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            ExerciseIcon(exercise.name),
-                            const SizedBox(width: Space.sm),
-                            Flexible(
-                              child: Text(
-                                exercise.name,
-                                style: context.type.titleMedium,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          'Best ${measure(summary.best, measurement, style)} · First ${measure(summary.first, measurement, style)}',
-                          style: context.type.bodySmall,
-                        ),
-                        if (summary.count > 1 &&
-                            (percent != null || change != 0))
-                          Text(
-                            percent == null
-                                ? '${changeText(change, measurement, style)} since first'
-                                : '${signed(percent)}% since first',
-                            style: context.type.labelMedium?.copyWith(
-                              color: change > 0
-                                  ? context.colors.green
-                                  : context.colors.muted,
+    return Column(
+      children: [
+        Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: () => context.push('/exercise/${exercise.id}'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: LayoutBuilder(
+                builder: (context, size) {
+                  final identity = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          ExerciseIcon(exercise.name),
+                          const SizedBox(width: Space.sm),
+                          Flexible(
+                            child: Text(
+                              exercise.name,
+                              style: context.type.titleMedium,
                             ),
                           ),
-                      ],
-                    );
-                    final latest = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 2,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              measure(summary.latest, measurement, style),
-                              style: context.type.titleMedium,
-                              semanticsLabel:
-                                  'Latest result: ${measure(summary.latest, measurement, style, accessible: true)}',
-                            ),
-                            Text(
-                              shortDay(summary.latestDay),
-                              style: context.type.bodySmall,
-                            ),
-                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Best ${measure(summary.best, measurement, style)} · First ${measure(summary.first, measurement, style)}',
+                        style: context.type.bodySmall,
+                      ),
+                      if (summary.count > 1 && (percent != null || change != 0))
+                        Text(
+                          percent == null
+                              ? '${changeText(change, measurement, style)} since first'
+                              : '${signed(percent)}% since first',
+                          style: context.type.labelMedium?.copyWith(
+                            color: change > 0
+                                ? context.colors.green
+                                : context.colors.muted,
+                          ),
                         ),
-                        if (summary.trend.length > 1) ...[
-                          const SizedBox(height: 6),
-                          Sparkline(summary.trend),
-                        ],
-                      ],
-                    );
-                    if (size.maxWidth < 300 &&
-                        MediaQuery.textScalerOf(context).scale(16) > 22) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  );
+                  final latest = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          if (reordering)
-                            Row(
-                              children: [
-                                _ExerciseDragHandle(
-                                  exercise: exercise,
-                                  index: index,
-                                ),
-                                Expanded(child: identity),
-                              ],
-                            )
-                          else
-                            identity,
-                          const SizedBox(height: 8),
-                          latest,
+                          Text(
+                            measure(summary.latest, measurement, style),
+                            style: context.type.titleMedium,
+                            semanticsLabel:
+                                'Latest result: ${measure(summary.latest, measurement, style, accessible: true)}',
+                          ),
+                          Text(
+                            shortDay(summary.latestDay),
+                            style: context.type.bodySmall,
+                          ),
                         ],
-                      );
-                    }
-                    final row = Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (reordering)
-                          _ExerciseDragHandle(exercise: exercise, index: index),
-                        Expanded(flex: 5, child: identity),
-                        const SizedBox(width: 12),
-                        Expanded(flex: 4, child: latest),
+                      ),
+                      if (summary.trend.length > 1) ...[
+                        const SizedBox(height: 6),
+                        Sparkline(summary.trend),
                       ],
+                    ],
+                  );
+                  if (size.maxWidth < 300 &&
+                      MediaQuery.textScalerOf(context).scale(16) > 22) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [identity, const SizedBox(height: 8), latest],
                     );
-                    return row;
-                  },
-                ),
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 5, child: identity),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 4, child: latest),
+                    ],
+                  );
+                },
               ),
             ),
           ),
-          const Divider(),
-        ],
-      ),
+        ),
+        const Divider(),
+      ],
     );
   }
-}
-
-class _ExerciseDragHandle extends StatelessWidget {
-  const _ExerciseDragHandle({required this.exercise, required this.index});
-
-  final Exercise exercise;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    key: ValueKey('reorder-handle-${exercise.id}'),
-    container: true,
-    label: 'Reorder ${exercise.name}',
-    hint: 'Hold and drag to change its order.',
-    child: ReorderableDelayedDragStartListener(
-      index: index,
-      child: const SizedBox.square(
-        dimension: Space.target,
-        child: Center(child: Icon(Icons.drag_indicator)),
-      ),
-    ),
-  );
 }

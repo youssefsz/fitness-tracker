@@ -27,6 +27,9 @@ final fixedNow = DateTime(2026, 11, 12, 12);
 class _Feedback implements FeedbackService {
   int selects = 0, saves = 0;
   @override
+  Future<void> dragStarted() async {}
+
+  @override
   Future<void> saved() async {
     saves++;
   }
@@ -369,7 +372,9 @@ void main() {
         await tapText(tester, 'All exercises');
         await tapText(tester, 'Demo squats');
         await tapText(tester, 'Overview');
-        await tapText(tester, 'Manage');
+        await tester.tap(find.byTooltip('Exercise options'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Exercise library');
         await tester.tap(find.byTooltip('Manage Demo squats'));
         await tester.pumpAndSettle();
         await tapText(tester, 'Archive');
@@ -385,7 +390,9 @@ void main() {
         expect(find.text('Push-ups'), findsWidgets);
 
         await tapText(tester, 'Overview');
-        await tapText(tester, 'Manage');
+        await tester.tap(find.byTooltip('Exercise options'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Exercise library');
         await tapText(tester, 'Restore');
         await tester.tap(find.byTooltip('Back'));
         await tester.pumpAndSettle();
@@ -401,7 +408,7 @@ void main() {
         await tester.pumpAndSettle();
         await tapText(tester, 'Delete exercise');
         await tapText(tester, 'Delete exercise');
-        expect(find.byTooltip('Exercise options'), findsNothing);
+        expect(find.byTooltip('Exercise options'), findsOneWidget);
         expect(find.text('Demo squats'), findsNothing);
         expect((await repo.snapshot()).entries.single.exerciseId, keep.id);
       } finally {
@@ -729,7 +736,9 @@ void main() {
       expect(visibleText('60.5 kg × 8 reps'), findsOneWidget);
       await enterSet('65', '0');
       await tapText(tester, 'Save 2 sets');
-      await tapText(tester, 'Manage');
+      await tester.tap(find.byTooltip('Exercise options'));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Exercise library');
       await tapText(tester, 'Edit');
       await tester.ensureVisible(find.text('Track sets'));
       await tapText(tester, 'Track sets');
