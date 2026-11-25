@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
@@ -83,6 +84,9 @@ class TrackerRepository {
           appearance: Appearance.values.byName(row.appearance),
           duration: DurationStyle.values.byName(row.durationStyle),
           haptics: row.haptics,
+          overviewExerciseOrder: row.overviewExerciseOrder == null
+              ? const []
+              : (jsonDecode(row.overviewExerciseOrder!) as List).cast<String>(),
         );
 
   Stream<Preferences> watchPreferences() => db
@@ -91,16 +95,120 @@ class TrackerRepository {
       .map(_preferences)
       .distinct();
 
-  Future<void> savePreferences(Preferences value) => db
-      .into(db.appPreferences)
-      .insertOnConflictUpdate(
-        AppPreferencesCompanion.insert(
-          id: const Value(1),
-          appearance: value.appearance.name,
-          durationStyle: value.duration.name,
-          haptics: value.haptics,
+  Future<void> savePreferences(Preferences value) async {
+    final order = value.overviewExerciseOrder.isEmpty
+        ? null
+        : jsonEncode(value.overviewExerciseOrder);
+    final stored = await db.select(db.appPreferences).getSingleOrNull();
+    if (stored == null) {
+      await db
+          .into(db.appPreferences)
+          .insert(
+            AppPreferencesCompanion.insert(
+              id: const Value(1),
+              appearance: value.appearance.name,
+              durationStyle: value.duration.name,
+              haptics: value.haptics,
+              overviewExerciseOrder: Value(order),
+            ),
+          );
+    } else {
+      await (db.update(
+        db.appPreferences,
+      )..where((row) => row.id.equals(1))).write(
+        AppPreferencesCompanion(
+          appearance: Value(value.appearance.name),
+          durationStyle: Value(value.duration.name),
+          haptics: Value(value.haptics),
+          overviewExerciseOrder: Value(order),
         ),
       );
+    }
+  }
+
+  Future<void> saveOverviewExerciseOrder(List<String> visibleOrder) async {
+    await db.transaction(() async {
+      final visibleRows = await db
+          .customSelect(
+            '''
+        SELECT DISTINCT x.id AS id
+        FROM exercises x JOIN entries e ON e.exercise_id = x.id
+        WHERE x.archived = 0
+        ORDER BY x.id
+        ''',
+            readsFrom: {db.exercises, db.entries},
+          )
+          .get();
+      final visible = visibleRows.map((row) => row.read<String>('id')).toSet();
+      if (visibleOrder.length != visible.length ||
+          visibleOrder.toSet().length != visible.length ||
+          !visibleOrder.toSet().containsAll(visible)) {
+        throw ArgumentError.value(
+          visibleOrder,
+          'visibleOrder',
+          'Must contain every currently tracked exercise exactly once.',
+        );
+      }
+
+      final allRows = await db.select(db.exercises).get();
+      final allIds = allRows.map((row) => row.id).toSet();
+      final stored = _preferences(
+        await db.select(db.appPreferences).getSingleOrNull(),
+      ).overviewExerciseOrder;
+      final complete = <String>[
+        ...stored.where((id) => allIds.contains(id)).toSet(),
+        ...allRows
+            .where((row) => !stored.contains(row.id))
+            .map((row) => row.id),
+      ];
+      final remaining = visibleOrder.iterator;
+      final reordered = [
+        for (final id in complete)
+          if (visible.contains(id)) (remaining..moveNext()).current else id,
+      ];
+      await _writeOverviewExerciseOrder(reordered);
+    });
+  }
+
+  Future<void> resetOverviewExerciseOrder() =>
+      _writeOverviewExerciseOrder(const []);
+
+  Future<void> _writeOverviewExerciseOrder(List<String> order) async {
+    final stored = await db.select(db.appPreferences).getSingleOrNull();
+    if (stored == null) {
+      await db
+          .into(db.appPreferences)
+          .insert(
+            AppPreferencesCompanion.insert(
+              id: const Value(1),
+              appearance: defaultPreferences.appearance.name,
+              durationStyle: defaultPreferences.duration.name,
+              haptics: defaultPreferences.haptics,
+              overviewExerciseOrder: Value(
+                order.isEmpty ? null : jsonEncode(order),
+              ),
+            ),
+          );
+    } else {
+      await (db.update(
+        db.appPreferences,
+      )..where((row) => row.id.equals(1))).write(
+        AppPreferencesCompanion(
+          overviewExerciseOrder: Value(
+            order.isEmpty ? null : jsonEncode(order),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _appendOverviewExercise(String id) async {
+    final order = _preferences(
+      await db.select(db.appPreferences).getSingleOrNull(),
+    ).overviewExerciseOrder;
+    if (order.isEmpty || order.contains(id)) return;
+    await _writeOverviewExerciseOrder([...order, id]);
+  }
 
   Stream<String?> watchProgressExercise() => db
       .select(db.appPreferences)
@@ -358,6 +466,7 @@ class TrackerRepository {
             updatedAt: time,
           ),
         );
+    await _appendOverviewExercise(id);
     return _exercise(row);
   }
 
@@ -429,6 +538,14 @@ class TrackerRepository {
     await (db.delete(
       db.exercises,
     )..where((exercise) => exercise.id.equals(id))).go();
+    final order = _preferences(
+      await db.select(db.appPreferences).getSingleOrNull(),
+    ).overviewExerciseOrder;
+    if (order.contains(id)) {
+      await _writeOverviewExerciseOrder(
+        order.where((exerciseId) => exerciseId != id).toList(),
+      );
+    }
   });
 
   Future<void> deleteAllExercises() => db.transaction(_clearExercises);
@@ -446,6 +563,10 @@ class TrackerRepository {
     await db.delete(db.goals).go();
     await db.delete(db.exercises).go();
     await db.delete(db.importReceipts).go();
+    final preferences = await db.select(db.appPreferences).getSingleOrNull();
+    if (preferences != null) {
+      await _writeOverviewExerciseOrder(const []);
+    }
   }
 
   Future<void> setArchived(String id, bool archived) =>
@@ -826,7 +947,23 @@ class TrackerRepository {
         trend: List.unmodifiable(group.value.map(_day)),
       ));
     }
+    final customOrder = _preferences(
+      await db.select(db.appPreferences).getSingleOrNull(),
+    ).overviewExerciseOrder;
+    final customRank = {
+      for (var i = 0; i < customOrder.length; i++) customOrder[i]: i,
+    };
     summaries.sort((a, b) {
+      if (customOrder.isNotEmpty) {
+        final aRank = customRank[a.exerciseId],
+            bRank = customRank[b.exerciseId];
+        if (aRank != null || bRank != null) {
+          if (aRank == null) return 1;
+          if (bRank == null) return -1;
+          final byRank = aRank.compareTo(bRank);
+          if (byRank != 0) return byRank;
+        }
+      }
       final byDate = b.latestDay.compareTo(a.latestDay);
       return byDate != 0 ? byDate : a.exerciseId.compareTo(b.exerciseId);
     });
@@ -845,6 +982,7 @@ class TrackerRepository {
           db.entries,
           db.exerciseSets,
           db.exercises,
+          db.appPreferences,
         ]),
       )
       .startWithInitial(_overview);
@@ -975,7 +1113,7 @@ class TrackerRepository {
         ]);
       }
     });
-    if (write.replace) await savePreferences(write.data.preferences);
+    await savePreferences(write.data.preferences);
     if (write.data.body case final body?) {
       await saveProfileDetails(body.profile);
     }

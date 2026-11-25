@@ -307,6 +307,7 @@ class _PreferencesState extends ConsumerState<_Preferences> {
         appearance: selected,
         duration: prefs.duration,
         haptics: prefs.haptics,
+        overviewExerciseOrder: prefs.overviewExerciseOrder,
       ));
     }
   }
@@ -332,6 +333,7 @@ class _PreferencesState extends ConsumerState<_Preferences> {
         appearance: prefs.appearance,
         duration: selected,
         haptics: prefs.haptics,
+        overviewExerciseOrder: prefs.overviewExerciseOrder,
       ));
     }
   }
@@ -365,6 +367,7 @@ class _PreferencesState extends ConsumerState<_Preferences> {
                   appearance: prefs.appearance,
                   duration: prefs.duration,
                   haptics: value,
+                  overviewExerciseOrder: prefs.overviewExerciseOrder,
                 )),
         ),
         FormProblem(_problem),

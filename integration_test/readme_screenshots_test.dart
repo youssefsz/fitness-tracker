@@ -52,6 +52,7 @@ void main() {
         appearance: gallery.appearance,
         duration: DurationStyle.clock,
         haptics: false,
+        overviewExerciseOrder: const [],
       ));
       await repository.saveProgressExercise(
         fixture.exercises

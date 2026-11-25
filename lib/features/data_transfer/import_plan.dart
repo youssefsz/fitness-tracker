@@ -196,6 +196,22 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
           : local.weightUnit,
     ), added);
   }
+  final overviewExerciseOrder = <String>[
+    ...current.preferences.overviewExerciseOrder,
+  ];
+  if (overviewExerciseOrder.isNotEmpty) {
+    final orderedSourceIds = [
+      ...source.preferences.overviewExerciseOrder,
+      ...source.exercises.map((exercise) => exercise.id),
+    ];
+    final ordered = overviewExerciseOrder.toSet();
+    for (final sourceId in orderedSourceIds) {
+      final targetId = exerciseMap[sourceId];
+      if (targetId != null && ordered.add(targetId)) {
+        overviewExerciseOrder.add(targetId);
+      }
+    }
+  }
   return BackupPlan(
     (
       replace: false,
@@ -203,7 +219,12 @@ BackupPlan planBackup(BackupData current, BackupData source, RestoreMode mode) {
         exercises: exercises,
         entries: entries,
         goals: goals,
-        preferences: current.preferences,
+        preferences: (
+          appearance: current.preferences.appearance,
+          duration: current.preferences.duration,
+          haptics: current.preferences.haptics,
+          overviewExerciseOrder: overviewExerciseOrder,
+        ),
         receipts: receipts,
         body: body,
       ),

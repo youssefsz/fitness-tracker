@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/providers.dart';
@@ -9,11 +10,14 @@ import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
+import 'exercise_order_sheet.dart';
 import '../history/entry_row.dart';
 import '../logging/log_page.dart';
 import '../profile/profile_avatar.dart';
 import '../progress/performance_chart.dart';
 import '../update/android_update_host.dart';
+
+enum _ExerciseListAction { reorder, library }
 
 class OverviewPage extends ConsumerWidget {
   const OverviewPage({super.key});
@@ -25,6 +29,7 @@ class OverviewPage extends ConsumerWidget {
     final overview = value.value;
     final exerciseCount = overview?.exercises.length ?? 0;
     final style = ref.watch(durationProvider);
+    final preferences = ref.watch(preferencesProvider).value;
     final content = value.hasValue && value.requireValue.exercises.isNotEmpty
         ? catalog.whenData((items) => (value.requireValue, items))
         : value.whenData((data) => (data, const <CatalogItem>[]));
@@ -73,6 +78,9 @@ class OverviewPage extends ConsumerWidget {
               for (final row in items)
                 if (!row.exercise.archived) row.exercise.id: row.exercise,
             };
+            final summaries = data.exercises
+                .where((summary) => map.containsKey(summary.exerciseId))
+                .toList();
             final recentByDay = <CalendarDay, List<Entry>>{};
             for (final entry in data.recent) {
               if (map.containsKey(entry.exerciseId)) {
@@ -85,18 +93,59 @@ class OverviewPage extends ConsumerWidget {
                 children: [
                   SectionTitle(
                     'Your exercises',
-                    action: QuietButton(
-                      'Manage',
-                      () => context.push('/exercises'),
+                    action: PopupMenuButton<_ExerciseListAction>(
+                      tooltip: 'Exercise options',
+                      icon: const Icon(LucideIcons.ellipsis, size: 22),
+                      onSelected: (choice) async {
+                        switch (choice) {
+                          case _ExerciseListAction.reorder:
+                            await showExerciseOrderSheet(
+                              context,
+                              items: [
+                                for (final summary in summaries)
+                                  (
+                                    exercise: map[summary.exerciseId]!,
+                                    summary: summary,
+                                  ),
+                              ],
+                              style: style,
+                              customOrder:
+                                  preferences
+                                      ?.overviewExerciseOrder
+                                      .isNotEmpty ??
+                                  false,
+                            );
+                          case _ExerciseListAction.library:
+                            if (context.mounted) context.push('/exercises');
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        if (summaries.length > 1)
+                          const PopupMenuItem(
+                            value: _ExerciseListAction.reorder,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(LucideIcons.arrowDownUp, size: 20),
+                              title: Text('Reorder exercises'),
+                            ),
+                          ),
+                        const PopupMenuItem(
+                          value: _ExerciseListAction.library,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(LucideIcons.dumbbell, size: 20),
+                            title: Text('Exercise library'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  for (final summary in data.exercises)
-                    if (map[summary.exerciseId] case final exercise?)
-                      _ExerciseSummary(
-                        exercise: exercise,
-                        summary: summary,
-                        style: style,
-                      ),
+                  for (final summary in summaries)
+                    _ExerciseSummary(
+                      exercise: map[summary.exerciseId]!,
+                      summary: summary,
+                      style: style,
+                    ),
                 ],
               ),
               side: Column(

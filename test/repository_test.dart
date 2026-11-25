@@ -130,6 +130,185 @@ void main() {
   );
 
   test(
+    'custom overview order persists, appends, and exports valid IDs',
+    () async {
+      final first = await repo.createExercise(
+        'Push-ups',
+        Measurement.repetitions,
+      );
+      final second = await repo.createExercise('Plank', Measurement.duration);
+      await repo.log([
+        record(first, '2026-11-10', [18]),
+        record(second, '2026-11-12', [60]),
+      ]);
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [second.id, first.id],
+      );
+
+      await repo.saveOverviewExerciseOrder([first.id, second.id]);
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [first.id, second.id],
+      );
+      await repo.setArchived(first.id, true);
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [second.id],
+      );
+      await repo.setArchived(first.id, false);
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [first.id, second.id],
+      );
+
+      final added = await repo.createExercise(
+        'Squats',
+        Measurement.repetitions,
+      );
+      expect((await repo.snapshot()).preferences.overviewExerciseOrder, [
+        first.id,
+        second.id,
+        added.id,
+      ]);
+      expect(
+        decodeBackup(
+          encodeBackup(await repo.snapshot(), now),
+          today,
+        ).preferences.overviewExerciseOrder,
+        [first.id, second.id, added.id],
+      );
+      await repo.log([
+        record(added, today.iso, [20]),
+      ]);
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [first.id, second.id, added.id],
+      );
+      await repo.savePreferences((
+        appearance: Appearance.dark,
+        duration: DurationStyle.seconds,
+        haptics: false,
+        overviewExerciseOrder: [first.id, second.id, added.id],
+      ));
+      await repo.deleteExercise(second.id);
+      final snapshot = await repo.snapshot();
+      expect(snapshot.preferences.overviewExerciseOrder, [first.id, added.id]);
+      expect(
+        decodeBackup(
+          encodeBackup(snapshot, now),
+          today,
+        ).preferences.overviewExerciseOrder,
+        [first.id, added.id],
+      );
+      await repo.resetOverviewExerciseOrder();
+      expect(
+        (await repo.watchOverview().first).exercises.map(
+          (summary) => summary.exerciseId,
+        ),
+        [added.id, first.id],
+      );
+    },
+  );
+
+  for (final customOrder in [false, true]) {
+    test(
+      'backup merge preserves ${customOrder ? 'custom' : 'recent'} ordering and exports a restorable snapshot',
+      () async {
+        final push = await repo.createExercise(
+          'Push-ups',
+          Measurement.repetitions,
+        );
+        final plank = await repo.createExercise('Plank', Measurement.duration);
+        await repo.log([
+          record(push, today.iso, [12]),
+          record(plank, today.iso, [60]),
+        ]);
+        final localPreferences = (
+          appearance: Appearance.dark,
+          duration: DurationStyle.seconds,
+          haptics: false,
+          overviewExerciseOrder: customOrder ? [plank.id, push.id] : <String>[],
+        );
+        await repo.savePreferences(localPreferences);
+        await repo.saveProgressExercise(push.id);
+
+        final incoming = TrackerRepository(
+          TrackerDatabase(NativeDatabase.memory()),
+          now: () => now,
+        );
+        addTearDown(incoming.close);
+        final squat = await incoming.createExercise(
+          'Squats',
+          Measurement.repetitions,
+        );
+        final wall = await incoming.createExercise(
+          'Wall sit',
+          Measurement.duration,
+        );
+        await incoming.log([
+          record(squat, today.iso, [20]),
+        ]);
+        await incoming.setArchived(wall.id, true);
+        await incoming.savePreferences((
+          appearance: Appearance.light,
+          duration: DurationStyle.clock,
+          haptics: true,
+          overviewExerciseOrder: [wall.id, squat.id],
+        ));
+        final source = decodeBackup(
+          encodeBackup(await incoming.snapshot(), now),
+          today,
+        );
+        final expectedOrder = customOrder
+            ? [plank.id, push.id, wall.id, squat.id]
+            : <String>[];
+
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await repo.restore(
+            (current) => planBackup(current, source, RestoreMode.merge).write,
+          );
+          final snapshot = await repo.snapshot();
+          expect(snapshot.exercises, hasLength(4));
+          expect(snapshot.entries, hasLength(3));
+          expect(snapshot.preferences.appearance, localPreferences.appearance);
+          expect(snapshot.preferences.duration, localPreferences.duration);
+          expect(snapshot.preferences.haptics, localPreferences.haptics);
+          expect(snapshot.preferences.overviewExerciseOrder, expectedOrder);
+          expect(await repo.watchProgressExercise().first, push.id);
+          final decoded = decodeBackup(encodeBackup(snapshot, now), today);
+          expect(backupFingerprint(decoded), backupFingerprint(snapshot));
+        }
+
+        final merged = await repo.snapshot();
+        final exported = decodeBackup(encodeBackup(merged, now), today);
+        final restored = TrackerRepository(
+          TrackerDatabase(NativeDatabase.memory()),
+        );
+        addTearDown(restored.close);
+        await restored.restore(
+          (current) => planBackup(current, exported, RestoreMode.replace).write,
+          recover: (_) async {},
+        );
+        expect(
+          backupFingerprint(await restored.snapshot()),
+          backupFingerprint(merged),
+        );
+      },
+    );
+  }
+
+  test(
     'performance retains reps for the plotted latest and best weight',
     () async {
       final bench = await repo.createExercise(
@@ -283,6 +462,7 @@ void main() {
         appearance: Appearance.dark,
         duration: DurationStyle.seconds,
         haptics: false,
+        overviewExerciseOrder: <String>[],
       );
       final weight = (day: today, grams: 80200);
       final photo = Uint8List.fromList([1, 2, 3]);
@@ -381,6 +561,7 @@ void main() {
         appearance: Appearance.dark,
         duration: DurationStyle.seconds,
         haptics: false,
+        overviewExerciseOrder: const <String>[],
       ));
       await first.close();
       final second = TrackerRepository(
@@ -391,7 +572,7 @@ void main() {
       final userVersion = await second.db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(userVersion.read<int>('user_version'), 6);
+      expect(userVersion.read<int>('user_version'), 7);
       final snapshot = await second.snapshot();
       expect(snapshot.entries.single.latest, 90);
       expect(snapshot.entries.single.notes, 'Stable form');
@@ -439,11 +620,64 @@ void main() {
       expect((await migrated.snapshot()).exercises.single.id, 'plank');
       await migrated.saveProgressExercise('plank');
       expect(await migrated.watchProgressExercise().first, 'plank');
-      expect((await migrated.snapshot()).preferences, (
-        appearance: Appearance.dark,
-        duration: DurationStyle.seconds,
-        haptics: false,
-      ));
+      final preferences = (await migrated.snapshot()).preferences;
+      expect(preferences.appearance, Appearance.dark);
+      expect(preferences.duration, DurationStyle.seconds);
+      expect(preferences.haptics, isFalse);
+      expect(preferences.overviewExerciseOrder, isEmpty);
+    },
+  );
+
+  test(
+    'v6 migration preserves records and starts with recent ordering',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('overview-v6-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = p.join(directory.path, 'fitness.sqlite');
+      final old = createHistoricalDatabase(file, 6);
+      try {
+        final timestamp = now.toUtc().toIso8601String();
+        old.execute(
+          '''
+        INSERT INTO exercises
+          (id, name, normalized_name, measurement, created_at, updated_at)
+        VALUES ('push', 'Push-ups', 'push-ups', 'repetitions', ?, ?)
+      ''',
+          [timestamp, timestamp],
+        );
+        old.execute(
+          '''
+        INSERT INTO entries
+          (id, exercise_id, activity_date, notes, entry_order, created_at, updated_at)
+        VALUES ('entry', 'push', ?, NULL, 1, ?, ?)
+      ''',
+          [today.iso, timestamp, timestamp],
+        );
+        old.execute(
+          "INSERT INTO exercise_sets (id, entry_id, position, value, reps) VALUES ('set', 'entry', 0, 18, NULL)",
+        );
+        old.execute('''
+        INSERT INTO app_preferences
+          (id, appearance, duration_style, haptics, progress_exercise_id)
+        VALUES (1, 'dark', 'seconds', 0, 'push')
+      ''');
+      } finally {
+        old.close();
+      }
+
+      final migrated = TrackerRepository(
+        TrackerDatabase(NativeDatabase(File(file))),
+      );
+      addTearDown(migrated.close);
+      final snapshot = await migrated.snapshot();
+      expect(snapshot.entries.single.latest, 18);
+      expect(snapshot.preferences.appearance, Appearance.dark);
+      expect(snapshot.preferences.overviewExerciseOrder, isEmpty);
+      expect(await migrated.watchProgressExercise().first, 'push');
+      final version = await migrated.db
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 7);
     },
   );
 
@@ -694,6 +928,7 @@ void main() {
         appearance: Appearance.dark,
         duration: DurationStyle.seconds,
         haptics: false,
+        overviewExerciseOrder: const [],
       ));
       final source = await repo.snapshot();
       final parsed = decodeBackup(encodeBackup(source, now), today);
