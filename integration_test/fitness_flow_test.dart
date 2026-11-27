@@ -43,6 +43,13 @@ Future<void> _waitFor(WidgetTester tester, Finder finder) async {
   expect(finder, findsWidgets);
 }
 
+Future<void> _waitForAbsent(WidgetTester tester, Finder finder) async {
+  for (var i = 0; i < 100 && finder.evaluate().isNotEmpty; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(finder, findsNothing);
+}
+
 Future<void> _reveal(WidgetTester tester, Finder widget) async {
   if (widget.hitTestable().evaluate().isNotEmpty) return;
   final scroll = find.byType(CustomScrollView).hitTestable();
@@ -203,6 +210,7 @@ void main() {
           '40',
         );
         await _tap(tester, 'Save 4 sets');
+        await _waitFor(tester, find.text('Latest 18 reps · Best 22 reps'));
         expect(find.text('Latest 18 reps · Best 22 reps'), findsOneWidget);
         expect(find.text('1:40'), findsOneWidget);
         await capture('02-history');
@@ -219,8 +227,10 @@ void main() {
         await _tap(tester, 'Plank');
         await _tap(tester, 'Push-ups');
         await _tap(tester, 'Best result');
+        await _waitFor(tester, find.textContaining('22 reps'));
         expect(find.textContaining('22 reps'), findsWidgets);
         await _tap(tester, 'View all values');
+        await _waitFor(tester, find.text('Best result by date'));
         expect(find.text('Best result by date'), findsOneWidget);
         await _tap(tester, '11 Nov 2026');
         await _tap(tester, 'All time');
@@ -235,16 +245,19 @@ void main() {
         await _tap(tester, 'Set 1');
         await tester.enterText(find.byType(TextFormField).first, '24');
         await _tap(tester, 'Save changes');
+        await _waitFor(tester, find.text('Latest 18 reps · Best 24 reps'));
         expect(find.text('Latest 18 reps · Best 24 reps'), findsOneWidget);
         await _tap(tester, 'Overview');
         await _tap(tester, 'Push-ups');
         await _tap(tester, 'Set goal');
         await tester.enterText(find.byType(TextField).first, '24');
         await _tap(tester, 'Save goal');
+        await _waitFor(tester, find.text('Achieved'));
         expect(find.text('Achieved'), findsOneWidget);
         await _tap(tester, 'Edit goal');
         await tester.enterText(find.byType(TextField).first, '25');
         await _tap(tester, 'Save goal');
+        await _waitFor(tester, find.text('1 rep to go'));
         expect(find.text('1 rep to go'), findsOneWidget);
         await _tap(tester, 'Edit goal');
         await _tap(tester, 'Remove goal');
@@ -254,11 +267,13 @@ void main() {
         );
         await tester.tap(remove);
         await _settle(tester);
+        await _waitFor(tester, find.text('Set goal'));
         expect(find.text('Set goal'), findsOneWidget);
 
         await _tooltip(tester, 'Exercise options');
         await _tap(tester, 'Archive exercise');
         await _tap(tester, 'Archive');
+        await _waitFor(tester, find.text('Repetitions · Archived'));
         expect(find.text('Repetitions · Archived'), findsOneWidget);
         await _tap(tester, 'Restore exercise');
         expect(find.text('Repetitions · Archived'), findsNothing);
@@ -280,7 +295,7 @@ void main() {
         await _tooltip(tester, 'Options for Push-ups on 11 Nov 2026');
         await _tap(tester, 'Delete entry');
         await _tap(tester, 'Delete entry');
-        expect(find.textContaining('Best 24 reps'), findsNothing);
+        await _waitForAbsent(tester, find.textContaining('Best 24 reps'));
         expect((await repo.snapshot()).entries.single.sets.single.value, 100);
         expect(tester.takeException(), isNull);
       } catch (_) {

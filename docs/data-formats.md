@@ -2,7 +2,7 @@
 
 The app accepts UTF-8 JSON up to 20 MiB. Backups allow at most 3,000 exercises, 20,000 entries, 100,000 sets, and 20,000 import receipts. Backups with profile data allow up to 100,000 weigh-ins. Each entry has 1 to 100 results. Activity values range from 0 to 999,999. Goal targets range from 1 to 999,999. JSON uses whole reps, seconds, or grams according to the exercise measurement.
 
-An activity date is a valid `YYYY-MM-DD` calendar date from 1900 onward. Activity cannot be in the future. A goal deadline can be in the future. Audit timestamps use ISO 8601 with the UTC suffix `Z`. Names are trimmed and limited to 80 characters. Name matching ignores case and runs of whitespace. Notes can be null or at most 2,000 characters.
+An activity date is a valid `YYYY-MM-DD` calendar date from 1900 onward. Activity cannot be in the future. A goal deadline can be in the future. Audit timestamps use ISO 8601 with the UTC suffix `Z`. Names are trimmed and limited to 80 characters. Name matching ignores case and runs of whitespace. Notes can be null or at most 2,000 user-perceived characters (grapheme clusters).
 
 Fitness Tracker validates the entire file before allowing confirmation. The first validation error names the field or record that needs correction. Unrecognized fields, unsupported versions, invalid references, and duplicate IDs are errors.
 

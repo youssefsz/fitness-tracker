@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,6 +19,8 @@ class HistoryPage extends ConsumerStatefulWidget {
   ConsumerState<HistoryPage> createState() => _HistoryPageState();
 }
 
+enum _HistoryDayAction { repeatWorkout }
+
 class _HistoryPageState extends ConsumerState<HistoryPage> {
   late var _selected = CalendarDay.fromDate(ref.read(nowProvider)());
   late var _month = DateTime(_selected.local.year, _selected.local.month);
@@ -24,6 +28,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   String _query = '';
   bool _searching = false;
   bool _allActivity = false;
+  bool _repeatBusy = false;
   static const _pageSize = 20;
   int _page = 0;
   final _entryHeading = GlobalKey();
@@ -74,6 +79,61 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       builder: (_) => _MonthDialog(month: _month, today: today.local),
     );
     if (mounted && picked != null) _changeMonth(picked);
+  }
+
+  Future<void> _repeatWorkout() async {
+    if (_repeatBusy || _allActivity) return;
+    final selectedDay = _selected;
+    setState(() => _repeatBusy = true);
+    try {
+      final repository = ref.read(repositoryProvider);
+      final entriesFuture = repository
+          .watchEntries(day: selectedDay, includeArchived: true)
+          .first;
+      final catalogFuture = ref.read(catalogProvider.future);
+      final (entries, catalog) = await (entriesFuture, catalogFuture).wait;
+      if (!mounted || _allActivity || _selected != selectedDay) return;
+
+      final byId = {
+        for (final item in catalog) item.exercise.id: item.exercise,
+      };
+      final repeated = <RepeatEntry>[];
+      var skippedArchivedCount = 0;
+      for (final entry in entries.reversed) {
+        final exercise = byId[entry.exerciseId];
+        if (exercise == null || exercise.archived) {
+          skippedArchivedCount++;
+        } else {
+          repeated.add((exercise: exercise, entry: entry));
+        }
+      }
+      if (entries.isEmpty) {
+        announce(context, 'No recorded activity on this day to repeat.');
+        return;
+      }
+      if (repeated.isEmpty) {
+        announce(
+          context,
+          '$skippedArchivedCount archived entr${skippedArchivedCount == 1 ? 'y was' : 'ies were'} skipped. Unarchive them to include them.',
+        );
+        return;
+      }
+      if (mounted) setState(() => _repeatBusy = false);
+      await showLogSheet(
+        context,
+        request: LogRequest(
+          repeatEntries: repeated,
+          repeatSourceDay: selectedDay,
+          skippedArchivedCount: skippedArchivedCount,
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        announce(context, 'Couldn’t load the full day. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _repeatBusy = false);
+    }
   }
 
   @override
@@ -224,16 +284,64 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               SectionTitle(
                 key: _entryHeading,
                 _allActivity ? 'All activity' : weekday(_selected),
-                action: QuietButton(
-                  'Add',
-                  () => showLogSheet(
-                    context,
-                    request: LogRequest(
-                      day: _allActivity ? today : _selected,
-                      exercise: selectedExercise,
+                action: Wrap(
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (!_allActivity)
+                      _repeatBusy
+                          ? Semantics(
+                              label: 'Loading workout',
+                              liveRegion: true,
+                              child: SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: Center(
+                                  child: SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      value:
+                                          MediaQuery.disableAnimationsOf(
+                                            context,
+                                          )
+                                          ? 0.75
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : PopupMenuButton<_HistoryDayAction>(
+                              tooltip: 'Day actions',
+                              icon: const Icon(LucideIcons.ellipsis, size: 22),
+                              onSelected: (action) {
+                                switch (action) {
+                                  case _HistoryDayAction.repeatWorkout:
+                                    unawaited(_repeatWorkout());
+                                }
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: _HistoryDayAction.repeatWorkout,
+                                  child: ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(LucideIcons.copy, size: 20),
+                                    title: Text('Repeat workout'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    QuietButton(
+                      'Add',
+                      () => showLogSheet(
+                        context,
+                        request: LogRequest(
+                          day: _allActivity ? today : _selected,
+                          exercise: selectedExercise,
+                        ),
+                      ),
+                      icon: LucideIcons.plus,
                     ),
-                  ),
-                  icon: LucideIcons.plus,
+                  ],
                 ),
               ),
               QuietButton(

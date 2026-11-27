@@ -51,6 +51,9 @@ final preferencesProvider = StreamProvider<Preferences>(
 final progressExerciseProvider = StreamProvider.autoDispose<String?>(
   (ref) => ref.watch(repositoryProvider).watchProgressExercise(),
 );
+final restTimerEnabledProvider = StreamProvider<bool>(
+  (ref) => ref.watch(repositoryProvider).watchRestTimerEnabled(),
+);
 final profileProvider = StreamProvider.autoDispose<LocalProfile>(
   (ref) => ref.watch(repositoryProvider).watchProfile(),
 );
@@ -63,6 +66,21 @@ final weighInsProvider = StreamProvider.autoDispose
 final catalogProvider = StreamProvider<List<CatalogItem>>(
   (ref) => ref.watch(repositoryProvider).watchCatalog(),
 );
+typedef PreviousSetFilter = ({
+  String exerciseId,
+  CalendarDay day,
+  String? excludingEntryId,
+});
+final previousSetProvider = FutureProvider.autoDispose
+    .family<PreviousSet?, PreviousSetFilter>(
+      (ref, filter) => ref
+          .watch(repositoryProvider)
+          .latestSetBefore(
+            filter.exerciseId,
+            filter.day,
+            excludingEntryId: filter.excludingEntryId,
+          ),
+    );
 final overviewProvider = StreamProvider.autoDispose<OverviewData>(
   (ref) => ref.watch(repositoryProvider).watchOverview(),
 );

@@ -30,8 +30,11 @@ typedef CatalogItem = ({
   int count,
   CalendarDay? lastDay,
   int? latest,
+  int? latestReps,
   bool hasGoal,
 });
+
+typedef PreviousSet = ({CalendarDay day, int value, int? reps});
 
 class TrackerRepository {
   TrackerRepository(this.db, {DateTime Function()? now, String Function()? id})
@@ -215,6 +218,27 @@ class TrackerRepository {
       .watchSingleOrNull()
       .map((row) => row?.progressExerciseId)
       .distinct();
+
+  Stream<bool> watchRestTimerEnabled() => db
+      .select(db.appPreferences)
+      .watchSingleOrNull()
+      .map((row) => row?.restTimerEnabled ?? false)
+      .distinct();
+
+  Future<void> saveRestTimerEnabled(bool enabled) => db
+      .into(db.appPreferences)
+      .insert(
+        AppPreferencesCompanion.insert(
+          id: const Value(1),
+          appearance: defaultPreferences.appearance.name,
+          durationStyle: defaultPreferences.duration.name,
+          haptics: defaultPreferences.haptics,
+          restTimerEnabled: Value(enabled),
+        ),
+        onConflict: DoUpdate(
+          (_) => AppPreferencesCompanion(restTimerEnabled: Value(enabled)),
+        ),
+      );
 
   Future<void> saveProgressExercise(String id) => db
       .into(db.appPreferences)
@@ -416,7 +440,10 @@ class TrackerRepository {
         ORDER BY e.activity_date DESC, e.entry_order DESC LIMIT 1) AS last_day,
       (SELECT s.value FROM entries e JOIN exercise_sets s ON s.entry_id=e.id
         WHERE e.exercise_id=x.id
-        ORDER BY e.activity_date DESC, e.entry_order DESC, s.position DESC LIMIT 1) AS latest
+        ORDER BY e.activity_date DESC, e.entry_order DESC, s.position DESC LIMIT 1) AS latest,
+      (SELECT s.reps FROM entries e JOIN exercise_sets s ON s.entry_id=e.id
+        WHERE e.exercise_id=x.id
+        ORDER BY e.activity_date DESC, e.entry_order DESC, s.position DESC LIMIT 1) AS latest_reps
     FROM exercises x LEFT JOIN totals t ON t.exercise_id=x.id
     ORDER BY x.normalized_name
     ''',
@@ -431,11 +458,44 @@ class TrackerRepository {
               count: r.read<int>('set_count'),
               lastDay: _optionalDay(r.readNullable<String>('last_day')),
               latest: r.readNullable<int>('latest'),
+              latestReps: r.readNullable<int>('latest_reps'),
               hasGoal: r.read<int>('has_goal') != 0,
             ),
           ),
         ),
       );
+
+  Future<PreviousSet?> latestSetBefore(
+    String exerciseId,
+    CalendarDay day, {
+    String? excludingEntryId,
+  }) async {
+    final exclude = excludingEntryId == null ? '' : 'AND e.id <> ?';
+    final variables = [
+      Variable.withString(exerciseId),
+      Variable.withString(day.iso),
+      if (excludingEntryId case final id?) Variable.withString(id),
+    ];
+    final row = await db
+        .customSelect(
+          '''
+      SELECT e.activity_date, s.value, s.reps
+      FROM entries e JOIN exercise_sets s ON s.entry_id = e.id
+      WHERE e.exercise_id = ? AND e.activity_date <= ? $exclude
+      ORDER BY e.activity_date DESC, e.entry_order DESC, s.position DESC
+      LIMIT 1
+      ''',
+          variables: variables,
+          readsFrom: {db.entries, db.exerciseSets},
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    return (
+      day: CalendarDay.parse(row.read<String>('activity_date')),
+      value: row.read<int>('value'),
+      reps: row.readNullable<int>('reps'),
+    );
+  }
 
   Future<Exercise> createExercise(
     String name,
@@ -586,7 +646,7 @@ class TrackerRepository {
         draft.day.isAfter(CalendarDay.fromDate(now()))) {
       throw const TrackerException('Choose today or a past activity date.');
     }
-    if ((draft.notes?.length ?? 0) > maxNotes) {
+    if (graphemeCount(draft.notes ?? '') > maxNotes) {
       throw const TrackerException('Notes are too long.');
     }
     if (draft.sets.isEmpty || draft.sets.length > maxSetsPerEntry) {
@@ -737,13 +797,14 @@ class TrackerRepository {
     String search = '',
     int? limit,
     int offset = 0,
+    bool includeArchived = false,
   }) => _entriesQuery(
     exerciseId: exerciseId,
     day: day,
     search: search,
     limit: limit,
     offset: offset,
-    includeArchived: false,
+    includeArchived: includeArchived,
   ).watch().map(_readEntries);
 
   Selectable<QueryRow> _entriesQuery({

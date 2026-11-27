@@ -73,12 +73,14 @@ class SheetLayout extends StatelessWidget {
     required this.closeLabel,
     required this.close,
     required this.child,
+    this.subtitle,
     this.back,
     this.footer,
     super.key,
   });
 
   final String title, closeLabel;
+  final String? subtitle;
   final VoidCallback? back, close;
   final Widget child;
   final Widget? footer;
@@ -133,17 +135,31 @@ class SheetLayout extends StatelessWidget {
                   Space.sm,
                   Space.sm,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (back != null)
-                      RoundControl(LucideIcons.chevronLeft, 'Back', back),
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text(title, style: context.type.titleLarge),
-                      ),
+                    Row(
+                      children: [
+                        if (back != null)
+                          RoundControl(LucideIcons.chevronLeft, 'Back', back),
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(title, style: context.type.titleLarge),
+                          ),
+                        ),
+                        RoundControl(LucideIcons.x, closeLabel, close),
+                      ],
                     ),
-                    RoundControl(LucideIcons.x, closeLabel, close),
+                    if (subtitle case final details?)
+                      Padding(
+                        padding: EdgeInsetsDirectional.only(
+                          start: back == null ? 0 : Space.target,
+                          end: Space.sm,
+                          bottom: Space.xs,
+                        ),
+                        child: Text(details, style: context.type.bodySmall),
+                      ),
                   ],
                 ),
               ),

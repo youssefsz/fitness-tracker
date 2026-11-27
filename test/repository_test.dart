@@ -49,6 +49,26 @@ Database createHistoricalDatabase(String path, int version) {
 }
 
 void main() {
+  test('repository validates notes by grapheme clusters', () async {
+    final repo = TrackerRepository(
+      TrackerDatabase(NativeDatabase.memory()),
+      now: () => now,
+    );
+    final x = await repo.createExercise('Plank', Measurement.duration);
+    const family = '👨‍👩‍👧‍👦';
+    await repo.log([
+      record(x, today.iso, [10], notes: family * maxNotes),
+    ]);
+    expect((await repo.snapshot()).entries.single.notes, family * maxNotes);
+    await expectLater(
+      repo.log([
+        record(x, today.iso, [20], notes: family * (maxNotes + 1)),
+      ]),
+      throwsA(isA<TrackerException>()),
+    );
+    await repo.close();
+  });
+
   // A few tests keep two isolated database files open to compare snapshots.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late TrackerRepository repo;
@@ -242,6 +262,7 @@ void main() {
         );
         await repo.savePreferences(localPreferences);
         await repo.saveProgressExercise(push.id);
+        await repo.saveRestTimerEnabled(true);
 
         final incoming = TrackerRepository(
           TrackerDatabase(NativeDatabase.memory()),
@@ -286,12 +307,18 @@ void main() {
           expect(snapshot.preferences.haptics, localPreferences.haptics);
           expect(snapshot.preferences.overviewExerciseOrder, expectedOrder);
           expect(await repo.watchProgressExercise().first, push.id);
+          expect(await repo.watchRestTimerEnabled().first, isTrue);
           final decoded = decodeBackup(encodeBackup(snapshot, now), today);
           expect(backupFingerprint(decoded), backupFingerprint(snapshot));
         }
 
         final merged = await repo.snapshot();
         final exported = decodeBackup(encodeBackup(merged, now), today);
+        await repo.restore(
+          (current) => planBackup(current, exported, RestoreMode.replace).write,
+          recover: (_) async {},
+        );
+        expect(await repo.watchRestTimerEnabled().first, isTrue);
         final restored = TrackerRepository(
           TrackerDatabase(NativeDatabase.memory()),
         );
@@ -304,6 +331,7 @@ void main() {
           backupFingerprint(await restored.snapshot()),
           backupFingerprint(merged),
         );
+        expect(await restored.watchRestTimerEnabled().first, isFalse);
       },
     );
   }
@@ -572,7 +600,7 @@ void main() {
       final userVersion = await second.db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(userVersion.read<int>('user_version'), 7);
+      expect(userVersion.read<int>('user_version'), 8);
       final snapshot = await second.snapshot();
       expect(snapshot.entries.single.latest, 90);
       expect(snapshot.entries.single.notes, 'Stable form');
@@ -677,9 +705,74 @@ void main() {
       final version = await migrated.db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 7);
+      expect(version.read<int>('user_version'), 8);
     },
   );
+
+  test('v7 migration preserves rows and defaults rest timer off', () async {
+    final directory = await Directory.systemTemp.createTemp('rest-timer-v7-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = p.join(directory.path, 'fitness.sqlite');
+    final old = createHistoricalDatabase(file, 7);
+    try {
+      final timestamp = now.toUtc().toIso8601String();
+      old.execute(
+        '''
+        INSERT INTO exercises
+          (id, name, normalized_name, measurement, created_at, updated_at)
+        VALUES ('push', 'Push-ups', 'push-ups', 'repetitions', ?, ?)
+        ''',
+        [timestamp, timestamp],
+      );
+      old.execute(
+        '''
+        INSERT INTO entries
+          (id, exercise_id, activity_date, notes, entry_order, created_at, updated_at)
+        VALUES ('entry', 'push', ?, 'Existing note', 1, ?, ?)
+        ''',
+        [today.iso, timestamp, timestamp],
+      );
+      old.execute(
+        "INSERT INTO exercise_sets VALUES ('set', 'entry', 0, 18, NULL)",
+      );
+      old.execute('''
+        INSERT INTO app_preferences
+          (id, appearance, duration_style, haptics, overview_exercise_order,
+           progress_exercise_id)
+        VALUES (1, 'dark', 'seconds', 0, '["push"]', 'push')
+      ''');
+    } finally {
+      old.close();
+    }
+
+    final migrated = TrackerRepository(
+      TrackerDatabase(NativeDatabase(File(file))),
+      now: () => now,
+    );
+    addTearDown(migrated.close);
+    final snapshot = await migrated.snapshot();
+    expect(snapshot.entries.single.notes, 'Existing note');
+    expect(snapshot.entries.single.latest, 18);
+    expect(snapshot.preferences.appearance, Appearance.dark);
+    expect(snapshot.preferences.duration, DurationStyle.seconds);
+    expect(snapshot.preferences.haptics, isFalse);
+    expect(snapshot.preferences.overviewExerciseOrder, ['push']);
+    expect(await migrated.watchProgressExercise().first, 'push');
+    expect(await migrated.watchRestTimerEnabled().first, isFalse);
+    final version = await migrated.db
+        .customSelect('PRAGMA user_version')
+        .getSingle();
+    expect(version.read<int>('user_version'), 8);
+
+    await migrated.saveRestTimerEnabled(true);
+    await migrated.savePreferences((
+      appearance: Appearance.light,
+      duration: DurationStyle.clock,
+      haptics: true,
+      overviewExerciseOrder: const <String>[],
+    ));
+    expect(await migrated.watchRestTimerEnabled().first, isTrue);
+  });
 
   test('migration preserves v1 records and enables persistent body data', () async {
     final directory = await Directory.systemTemp.createTemp('fitness-v1-');

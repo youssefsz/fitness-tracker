@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:characters/characters.dart';
+
 import 'body_metrics.dart';
 
 const maxSetValue = 999999;
@@ -7,6 +9,8 @@ const maxEntryOrder = 9007199254740991;
 const maxSetsPerEntry = 100;
 const maxExerciseName = 80;
 const maxNotes = 2000;
+
+int graphemeCount(String value) => value.characters.length;
 
 final class CalendarDay implements Comparable<CalendarDay> {
   const CalendarDay._(this.iso, this._epochDay);
