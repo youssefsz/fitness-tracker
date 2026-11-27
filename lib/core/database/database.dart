@@ -37,7 +37,9 @@ class Entries extends Table {
         activityDate.isBiggerOrEqualValue('1900-01-01') &
         activityDate.isSmallerOrEqualValue('9999-12-31'),
   )();
-  TextColumn get notes => text().withLength(min: 0, max: 2000).nullable()();
+  // Grapheme limits are validated by TrackerRepository. Drift's generated
+  // text-length check uses String.length (UTF-16 code units).
+  TextColumn get notes => text().nullable()();
   IntColumn get entryOrder =>
       integer().unique().check(entryOrder.isBiggerThanValue(0))();
   TextColumn get createdAt => text()();
@@ -84,6 +86,8 @@ class AppPreferences extends Table {
       text().check(durationStyle.isIn(['clock', 'seconds']))();
   BoolColumn get haptics => boolean()();
   TextColumn get overviewExerciseOrder => text().nullable()();
+  BoolColumn get restTimerEnabled =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get progressExerciseId => text().nullable().references(
     Exercises,
     #id,
@@ -157,13 +161,13 @@ class TrackerDatabase extends _$TrackerDatabase {
   TrackerDatabase(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => transaction(() => m.createAll()),
     onUpgrade: (m, from, to) async {
-      if (from < 1 || from > 6 || to != 7) {
+      if (from < 1 || from > 7 || to != 8) {
         throw StateError(
           'Unsupported database schema transition: $from → $to.',
         );
@@ -202,7 +206,10 @@ class TrackerDatabase extends _$TrackerDatabase {
           });
         }
       }
-      await m.addColumn(appPreferences, appPreferences.overviewExerciseOrder);
+      if (from < 7) {
+        await m.addColumn(appPreferences, appPreferences.overviewExerciseOrder);
+      }
+      await m.addColumn(appPreferences, appPreferences.restTimerEnabled);
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );

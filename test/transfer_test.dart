@@ -161,6 +161,38 @@ void main() {
     }
   });
 
+  test('backup and activity notes use a 2000 grapheme limit', () {
+    const family = '👨‍👩‍👧‍👦';
+    final activity = activityExample(today)
+        .replaceFirst('"notes": null', '"notes": "${family * maxNotes}"');
+    expect(
+      decodeActivity(activity, today).records.first.notes,
+      family * maxNotes,
+    );
+    expect(
+      () => decodeActivity(
+        activity.replaceFirst(family * maxNotes, family * (maxNotes + 1)),
+        today,
+      ),
+      throwsFormatException,
+    );
+
+    final x = exercise('push', 'Push-ups', Measurement.repetitions);
+    final backup = encodeBackup(
+      data(
+        exercises: [x],
+        entries: [
+          entry('entry', x.id, [12], order: 1, notes: family * maxNotes),
+          entry('emoji-entry', x.id, [10], order: 2, notes: '💪' * 1001),
+        ],
+      ),
+      time,
+    );
+    final restored = decodeBackup(backup, today);
+    expect(restored.entries.first.notes, family * maxNotes);
+    expect(restored.entries.last.notes, '💪' * 1001);
+  });
+
   test('mapping requires explicit archived and mismatched unit decisions; flags overlaps', () {
     final batch = ActivityBatch(
       decodeActivity(activityExample(today), today).records.take(2),

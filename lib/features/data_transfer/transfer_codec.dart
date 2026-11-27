@@ -127,7 +127,10 @@ class _Field {
 
   String? notes({bool trim = true}) {
     if (value == null) return null;
-    final raw = string(min: 0, max: maxNotes);
+    final raw = value;
+    if (raw is! String || graphemeCount(raw) > maxNotes) {
+      fail('Expected text with 0 to $maxNotes characters.');
+    }
     return trim ? (raw.trim().isEmpty ? null : raw.trim()) : raw;
   }
 

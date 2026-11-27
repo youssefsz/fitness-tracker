@@ -338,6 +338,28 @@ class _PreferencesState extends ConsumerState<_Preferences> {
     }
   }
 
+  Future<void> _restTimer(bool enabled) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _problem = null;
+    });
+    try {
+      await ref.read(repositoryProvider).saveRestTimerEnabled(enabled);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _problem = describeError(
+            error,
+            fallback: 'Couldn’t save this preference.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AsyncPanel(
     ref.watch(preferencesProvider),
@@ -369,6 +391,18 @@ class _PreferencesState extends ConsumerState<_Preferences> {
                   haptics: value,
                   overviewExerciseOrder: prefs.overviewExerciseOrder,
                 )),
+        ),
+        AsyncPanel<bool>(
+          ref.watch(restTimerEnabledProvider),
+          loadingLabel: 'Loading rest timer preference',
+          loading: const SkeletonRows(count: 1, rowHeight: 50),
+          retry: () => ref.invalidate(restTimerEnabledProvider),
+          builder: (enabled) => SwitchRow(
+            value: enabled,
+            title: 'Rest timer',
+            subtitle: 'Show in live workouts',
+            onChanged: _saving ? null : _restTimer,
+          ),
         ),
         FormProblem(_problem),
       ],

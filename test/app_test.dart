@@ -102,6 +102,7 @@ Future<void> _pumpApp(
   double height = 874,
   double scale = 1.0,
   bool reducedMotion = false,
+  DateTime Function()? now,
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = Size(width, height);
@@ -116,7 +117,7 @@ Future<void> _pumpApp(
     ProviderScope(
       overrides: [
         repositoryProvider.overrideWithValue(repo),
-        nowProvider.overrideWithValue(() => fixedNow),
+        nowProvider.overrideWithValue(now ?? () => fixedNow),
         if (feedback != null) feedbackProvider.overrideWithValue(feedback),
         if (files != null) filesProvider.overrideWithValue(files),
       ],
@@ -537,6 +538,120 @@ void main() {
       }
     },
   );
+
+  testWidgets('notes count grapheme clusters through logging and saving', (
+    tester,
+  ) async {
+    final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+    await repo.createExercise('Push-ups', Measurement.repetitions);
+    try {
+      await _pumpApp(tester, repo);
+      await tapText(tester, 'Log your first result');
+      await tapText(tester, 'Push-ups');
+      await tester.enterText(find.byType(TextFormField).first, '12');
+      await tapText(tester, 'Add a note');
+      final notes = find.byType(TextFormField).last;
+      const ordinaryNote = 'Kept the pace steady.';
+      await tester.enterText(notes, ordinaryNote);
+      await tester.pumpAndSettle();
+      expect(find.text('${ordinaryNote.length}/$maxNotes'), findsNothing);
+      const family = '👨‍👩‍👧‍👦';
+      await tester.enterText(notes, family * (maxNotes + 1));
+      await tester.pumpAndSettle();
+
+      final text = tester.widget<TextFormField>(notes).controller!.text;
+      expect(text, family * (maxNotes + 1));
+      expect(graphemeCount(text), maxNotes + 1);
+      expect(find.text('${maxNotes + 1}/$maxNotes'), findsOneWidget);
+      await tapText(tester, 'Save activity');
+      expect(
+        find.text('Keep notes to $maxNotes characters or fewer.'),
+        findsOneWidget,
+      );
+      expect((await repo.snapshot()).entries, isEmpty);
+
+      await tester.enterText(notes, family * maxNotes);
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Save activity');
+
+      final saved = (await repo.snapshot()).entries.single;
+      expect(saved.notes, family * maxNotes);
+      expect(graphemeCount(saved.notes!), maxNotes);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await clean(tester, repo);
+    }
+  });
+
+  testWidgets('rest timer runs without changing the logging draft', (
+    tester,
+  ) async {
+    var now = fixedNow;
+    final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+    await repo.createExercise(
+      'Push-ups',
+      Measurement.repetitions,
+      trackSets: true,
+    );
+    await repo.saveRestTimerEnabled(true);
+    try {
+      await _pumpApp(
+        tester,
+        repo,
+        width: 360,
+        height: 740,
+        scale: 1.3,
+        reducedMotion: true,
+        now: () => now,
+      );
+      await tapText(tester, 'Log your first result');
+      await tapText(tester, 'Start live workout');
+      await tapText(tester, 'Push-ups');
+      await tester.enterText(find.byType(TextFormField).first, '12');
+      final timerControl = find.text('Rest 1:30');
+      expect(timerControl.hitTestable(), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tapText(tester, 'Start rest');
+      expect(find.text('1:30'), findsOneWidget);
+      final progress = find.byType(LinearProgressIndicator);
+      final save = find.widgetWithText(FilledButton, 'Finish workout');
+      expect(tester.getTopLeft(progress).dx, tester.getTopLeft(save).dx);
+      expect(
+        tester.getBottomLeft(progress).dy,
+        lessThan(tester.getTopLeft(save).dy),
+      );
+      expect(tester.widget<LinearProgressIndicator>(progress).value, 1);
+
+      now = now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('1:29'), findsOneWidget);
+      await tester.tap(find.byTooltip('Stop rest timer'));
+      await tester.pumpAndSettle();
+      expect(find.text('1:29'), findsNothing);
+
+      await tapText(tester, 'Start rest');
+      expect(find.text('1:30'), findsOneWidget);
+      now = now.add(const Duration(minutes: 2));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Rest complete'), findsOneWidget);
+
+      await tapText(tester, 'Done');
+      await tester.tap(timerControl);
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Turn off rest timer');
+      expect(timerControl, findsNothing);
+      expect(find.text('Start rest'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect((await repo.snapshot()).entries, isEmpty);
+
+      await tapText(tester, 'Complete set');
+      await tapText(tester, 'Finish workout');
+      expect((await repo.snapshot()).entries.single.sets.single.value, 12);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await clean(tester, repo);
+    }
+  });
 
   testWidgets(
     'entry sheet follows keyboard dismissal without a final height jump',
